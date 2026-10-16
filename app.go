@@ -49,18 +49,57 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 }
 
+// NetworkAdapter represents a network interface with strings formatted for the UI.
+type NetworkAdapter struct {
+	Name  string `json:"name"`
+	IP    string `json:"ip"`
+	CIDR  string `json:"cidr"`
+	MAC   string `json:"mac"`
+	Index int    `json:"index"`
+}
+
+func toNetworkAdapter(iface netinfo.Interface) NetworkAdapter {
+	ipStr := ""
+	if iface.Addr.IsValid() {
+		ipStr = iface.Addr.String()
+	}
+	cidrStr := ""
+	if iface.Prefix.IsValid() {
+		cidrStr = iface.Prefix.String()
+	}
+	return NetworkAdapter{
+		Name:  iface.Name,
+		IP:    ipStr,
+		CIDR:  cidrStr,
+		MAC:   iface.MAC.String(),
+		Index: iface.Index,
+	}
+}
+
 // GetNetworkInterfaces returns the list of active IPv4 network interfaces.
-func (a *App) GetNetworkInterfaces() ([]netinfo.Interface, error) {
-	return netinfo.ListInterfaces()
+func (a *App) GetNetworkInterfaces() ([]NetworkAdapter, error) {
+	ifaces, err := netinfo.ListInterfaces()
+	if err != nil {
+		return nil, err
+	}
+	adapters := make([]NetworkAdapter, 0, len(ifaces))
+	for _, iface := range ifaces {
+		adapters = append(adapters, toNetworkAdapter(iface))
+	}
+	return adapters, nil
 }
 
 // GetDefaultInterface resolves the primary network interface via zero-packet routing query.
-func (a *App) GetDefaultInterface() (netinfo.Interface, error) {
+func (a *App) GetDefaultInterface() (NetworkAdapter, error) {
 	ifaces, err := netinfo.ListInterfaces()
 	if err != nil {
-		return netinfo.Interface{}, err
+		return NetworkAdapter{}, err
 	}
-	return netinfo.DefaultInterface(ifaces, netinfo.NewUDPRouteSource())
+	defIface, err := netinfo.DefaultInterface(ifaces, netinfo.NewUDPRouteSource())
+	if err != nil {
+		return NetworkAdapter{}, err
+	}
+	return toNetworkAdapter(defIface), nil
 }
 
 // CheckCapabilities returns diagnostic information about ICMP socket capabilities.
