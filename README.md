@@ -17,6 +17,9 @@ Aplicativo desktop em tempo real para mapeamento e diagnóstico de redes locais 
 netprobe-wifi/
 ├── docs/
 │   └── adr/                 # Registro de Decisões de Arquitetura (ADRs)
+├── frontend/                # React 19 + TypeScript + Tailwind CSS (Organic Modernism)
+│   ├── src/                 # Componentes, estado e integração Wails
+│   └── wailsjs/             # Bindings gerados automaticamente pelo Wails CLI
 ├── internal/
 │   ├── netinfo/             # Descoberta de interfaces, rota padrão e política de alvos
 │   ├── oui/                 # Base OUI da IEEE embutida e utilitários MAC
@@ -68,6 +71,12 @@ GOOS=windows GOARCH=amd64 go build -o /dev/null .
 
 # Validação de compilação nativa para Linux
 go build -tags webkit2_41 .
+
+# Testes e validação do Frontend
+cd frontend
+npm run typecheck
+npm test
+npm run build
 ```
 
 ---
@@ -81,6 +90,7 @@ go build -tags webkit2_41 .
 - [ADR 0005: ARP Provocado pelo Kernel, Resolução de Vizinhos e Vínculo IP ↔ MAC](docs/adr/0005-arp-provocado-e-tabela-vizinhos.md)
 - [ADR 0006: Varredura de Portas TCP, Connect Scan e Controle de Concorrência](docs/adr/0006-varredura-portas-tcp.md)
 - [ADR 0007: Orquestração de Varredura, Lotes de Eventos e Wails Backend](docs/adr/0007-orquestracao-lotes-e-wails-backend.md)
+- [ADR 0008: Interface Gráfica em Tempo Real e Estética Minimalista Organic Modernism](docs/adr/0008-interface-grafica-e-estetica-minimalista.md)
 
 ---
 
