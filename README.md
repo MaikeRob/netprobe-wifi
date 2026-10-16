@@ -23,7 +23,8 @@ netprobe-wifi/
 │   │   └── gen/             # Ferramenta para conversão do CSV oficial da IEEE
 │   └── scanner/
 │       ├── icmp/            # Motor de varredura ICMP (ping sweep) multiplataforma
-│       └── arp/             # ARP provocado pelo kernel e vínculo IP ↔ MAC
+│       ├── arp/             # ARP provocado pelo kernel e vínculo IP ↔ MAC
+│       └── port/            # Varredura de portas TCP (connect scan) com controle de concorrência
 ├── go.mod                   # Módulo Go (netprobe-wifi)
 └── README.md
 ```
@@ -69,6 +70,7 @@ GOOS=windows GOARCH=amd64 go build ./...
 - [ADR 0003: Política de Alvos, Descoberta de Interface e Ausência de Tráfego](docs/adr/0003-politica-de-alvos-e-interface-padrao.md)
 - [ADR 0004: Mecanismo de Varredura ICMP, Multiplexação e Privilégios](docs/adr/0004-mecanismo-icmp-e-privilegios.md)
 - [ADR 0005: ARP Provocado pelo Kernel, Resolução de Vizinhos e Vínculo IP ↔ MAC](docs/adr/0005-arp-provocado-e-tabela-vizinhos.md)
+- [ADR 0006: Varredura de Portas TCP, Connect Scan e Controle de Concorrência](docs/adr/0006-varredura-portas-tcp.md)
 
 ---
 
