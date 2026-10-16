@@ -24,7 +24,13 @@ netprobe-wifi/
 │   └── scanner/
 │       ├── icmp/            # Motor de varredura ICMP (ping sweep) multiplataforma
 │       ├── arp/             # ARP provocado pelo kernel e vínculo IP ↔ MAC
-│       └── port/            # Varredura de portas TCP (connect scan) com controle de concorrência
+│       ├── port/            # Varredura de portas TCP (connect scan) com controle de concorrência
+│       ├── aggregator.go    # Agregador de eventos em lotes (~100 ms)
+│       ├── events.go        # Contratos de dados de eventos tipados
+│       └── orchestrator.go  # Orquestrador unificado dos 5 elementos de varredura
+├── app.go                   # Camada fina de métodos expostos ao Wails
+├── main.go                  # Ponto de entrada da aplicação desktop Wails v2
+├── wails.json               # Configuração do projeto Wails
 ├── go.mod                   # Módulo Go (netprobe-wifi)
 └── README.md
 ```
@@ -38,7 +44,7 @@ netprobe-wifi/
 - **Wails:** CLI `v2.16.0` (`go install github.com/wailsapp/wails/v2/cmd/wails@v2.16.0`)
 - **Linux (Ubuntu 24.04 / Zorin OS 18 ou derivados):**
   - `build-essential`, `pkg-config`, `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`
-  - Tag obrigatória de compilação: `-tags webkit2_41` (ex.: `wails dev -tags webkit2_41`)
+  - Tag obrigatória de compilação: `-tags webkit2_41` (ex.: `wails dev -tags webkit2_41` ou `go build -tags webkit2_41 .`)
 
 ---
 
@@ -51,14 +57,17 @@ Para executar a suíte completa de testes automatizados com detector de condiç�
 gofmt -l .
 
 # Análise estática do Go
-go vet ./...
+go vet -tags webkit2_41 ./...
 
 # Testes unitários com detector de corrida
-go test -v -race -count=1 ./...
+go test -tags webkit2_41 -v -race -count=1 ./...
 
 # Validação de compilação cruzada para Windows (sem CGO)
 GOOS=windows GOARCH=amd64 go vet ./...
-GOOS=windows GOARCH=amd64 go build ./...
+GOOS=windows GOARCH=amd64 go build -o /dev/null .
+
+# Validação de compilação nativa para Linux
+go build -tags webkit2_41 .
 ```
 
 ---
@@ -71,6 +80,7 @@ GOOS=windows GOARCH=amd64 go build ./...
 - [ADR 0004: Mecanismo de Varredura ICMP, Multiplexação e Privilégios](docs/adr/0004-mecanismo-icmp-e-privilegios.md)
 - [ADR 0005: ARP Provocado pelo Kernel, Resolução de Vizinhos e Vínculo IP ↔ MAC](docs/adr/0005-arp-provocado-e-tabela-vizinhos.md)
 - [ADR 0006: Varredura de Portas TCP, Connect Scan e Controle de Concorrência](docs/adr/0006-varredura-portas-tcp.md)
+- [ADR 0007: Orquestração de Varredura, Lotes de Eventos e Wails Backend](docs/adr/0007-orquestracao-lotes-e-wails-backend.md)
 
 ---
 

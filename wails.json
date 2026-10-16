@@ -1,0 +1,20 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "netprobe-wifi",
+  "outputfilename": "netprobe-wifi",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "netprobe-wifi",
+    "email": ""
+  },
+  "info": {
+    "companyName": "netprobe-wifi",
+    "productName": "NetProbe Wi-Fi",
+    "productVersion": "1.0.0",
+    "copyright": "Copyright 2026",
+    "comments": "Real-time local Wi-Fi mapping tool"
+  }
+}
