@@ -10,6 +10,24 @@
   body {
     background-color: #121214;
     color: #f4f4f6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Ensure native dropdown menus on Linux GTK/WebKit have high-contrast background and text */
+  select {
+    color-scheme: dark;
+  }
+
+  option {
+    background-color: #1c1917;
+    color: #fafaf9;
+    padding: 6px 10px;
+  }
+
+  input::placeholder {
+    color: #a8a29e;
   }
 }
 

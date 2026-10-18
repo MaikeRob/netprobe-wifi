@@ -64,7 +64,8 @@ func (o *Orchestrator) Run(ctx context.Context, cfg OrchestratorConfig, handlers
 	if err != nil {
 		if handlers.OnProgress != nil {
 			handlers.OnProgress(SweepProgressEvent{
-				Stage: StageError,
+				Stage:        StageError,
+				ErrorMessage: fmt.Sprintf("Faixa de rede inválida ou não autorizada: %v", err),
 			})
 		}
 		return fmt.Errorf("validating target %q: %w", cfg.CIDR, err)
@@ -86,8 +87,15 @@ func (o *Orchestrator) Run(ctx context.Context, cfg OrchestratorConfig, handlers
 	})
 
 	// 2. Pre-scan Neighbor Table Snapshot (rules/redes.md temporal diff)
+	// When ICMP pinger is active, snapshot ensures Stage 2 ARP only credits newly provoked entries.
+	// When ICMP is unavailable, disable snapshot filtering so pre-existing active hosts (e.g. gateway) are discovered.
 	if o.arpEngine != nil {
-		_ = o.arpEngine.TakeSnapshot()
+		if o.pinger != nil {
+			o.arpEngine.SetFilterSnapshot(true)
+			_ = o.arpEngine.TakeSnapshot()
+		} else {
+			o.arpEngine.SetFilterSnapshot(false)
+		}
 	}
 
 	// 3. Start Event Aggregator (~100 ms periodic batch flush)
@@ -95,92 +103,110 @@ func (o *Orchestrator) Run(ctx context.Context, cfg OrchestratorConfig, handlers
 	aggregator.Start()
 	defer aggregator.Stop()
 
-	// 4. Stage 1: ICMP Ping Sweep
-	emitProgress(SweepProgressEvent{
-		Stage:      StageICMP,
-		TotalHosts: totalHosts,
-		Percent:    0,
-	})
-
-	icmpRate := cfg.RateLimit
-	if icmpRate <= 0 {
-		icmpRate = icmp.DefaultRateLimitPPS
-	}
-	icmpTimeout := cfg.ICMPTimeout
-	if icmpTimeout <= 0 {
-		icmpTimeout = icmp.DefaultTimeout
-	}
-
-	sweepEngine, err := icmp.NewSweepEngine(o.pinger, icmp.SweepConfig{
-		RateLimitPPS: icmpRate,
-		Timeout:      icmpTimeout,
-	})
-	if err != nil {
-		return fmt.Errorf("initializing icmp sweep engine: %w", err)
-	}
-
+	// 4. Stage 1: ICMP Ping Sweep (if pinger is available)
 	var scannedCount int64
 	var icmpCount int64
 	var silentIPs []netip.Addr
 	var silentMu sync.Mutex
 
-	sweepErr := sweepEngine.Sweep(ctx, target, func(res icmp.Result) {
-		scanned := atomic.AddInt64(&scannedCount, 1)
+	if o.pinger != nil {
+		emitProgress(SweepProgressEvent{
+			Stage:      StageICMP,
+			TotalHosts: totalHosts,
+			Percent:    0,
+		})
 
-		if res.Responded {
-			atomic.AddInt64(&icmpCount, 1)
+		icmpRate := cfg.RateLimit
+		if icmpRate <= 0 {
+			icmpRate = icmp.DefaultRateLimitPPS
+		}
+		icmpTimeout := cfg.ICMPTimeout
+		if icmpTimeout <= 0 {
+			icmpTimeout = icmp.DefaultTimeout
+		}
 
-			macStr := ""
-			vendor := ""
-			kind := "unknown"
+		sweepEngine, err := icmp.NewSweepEngine(o.pinger, icmp.SweepConfig{
+			RateLimitPPS: icmpRate,
+			Timeout:      icmpTimeout,
+		})
+		if err != nil {
+			emitProgress(SweepProgressEvent{
+				Stage:        StageError,
+				ErrorMessage: fmt.Sprintf("Inicializando motor ICMP: %v", err),
+			})
+			return fmt.Errorf("initializing icmp sweep engine: %w", err)
+		}
 
-			if o.arpEngine != nil {
-				hostInfo, found, _ := o.arpEngine.EnrichHost(res.IP)
-				if found {
-					macStr = hostInfo.MACString
-					vendor = hostInfo.Vendor
-					kind = hostInfo.Kind.String()
+		sweepErr := sweepEngine.Sweep(ctx, target, func(res icmp.Result) {
+			scanned := atomic.AddInt64(&scannedCount, 1)
+
+			if res.Responded {
+				atomic.AddInt64(&icmpCount, 1)
+
+				macStr := ""
+				vendor := ""
+				kind := "unknown"
+
+				if o.arpEngine != nil {
+					hostInfo, found, _ := o.arpEngine.EnrichHost(res.IP)
+					if found {
+						macStr = hostInfo.MACString
+						vendor = hostInfo.Vendor
+						kind = hostInfo.Kind.String()
+					}
+				}
+
+				aggregator.AddHost(DiscoveredHost{
+					IP:           res.IP.String(),
+					MAC:          macStr,
+					Vendor:       vendor,
+					Kind:         kind,
+					RTT:          res.RTT,
+					DiscoveredBy: arp.StatusDiscoveredICMP,
+					Responded:    true,
+				})
+			} else {
+				// Silent host: save for Stage 2 if inside local L2 subnet
+				if cfg.Interface.Prefix.IsValid() && cfg.Interface.Prefix.Contains(res.IP) && res.IP != cfg.Interface.Addr {
+					silentMu.Lock()
+					silentIPs = append(silentIPs, res.IP)
+					silentMu.Unlock()
 				}
 			}
 
-			aggregator.AddHost(DiscoveredHost{
-				IP:           res.IP.String(),
-				MAC:          macStr,
-				Vendor:       vendor,
-				Kind:         kind,
-				RTT:          res.RTT,
-				DiscoveredBy: arp.StatusDiscoveredICMP,
-				Responded:    true,
-			})
-		} else {
-			// Silent host: save for Stage 2 if inside local L2 subnet
-			if cfg.Interface.Prefix.IsValid() && cfg.Interface.Prefix.Contains(res.IP) && res.IP != cfg.Interface.Addr {
-				silentMu.Lock()
-				silentIPs = append(silentIPs, res.IP)
-				silentMu.Unlock()
+			// Emit ICMP progress: represents the first 80% of total progress
+			curICMP := atomic.LoadInt64(&icmpCount)
+			pct := 0.0
+			if totalHosts > 0 {
+				pct = (float64(scanned) / float64(totalHosts)) * 80.0
 			}
-		}
 
-		// Emit ICMP progress: represents the first 80% of total progress
-		curICMP := atomic.LoadInt64(&icmpCount)
-		pct := 0.0
-		if totalHosts > 0 {
-			pct = (float64(scanned) / float64(totalHosts)) * 80.0
-		}
-
-		emitProgress(SweepProgressEvent{
-			Stage:          StageICMP,
-			TotalHosts:     totalHosts,
-			ScannedHosts:   int(scanned),
-			ActiveHosts:    int(curICMP),
-			ICMPDiscovered: int(curICMP),
-			Percent:        pct,
+			emitProgress(SweepProgressEvent{
+				Stage:          StageICMP,
+				TotalHosts:     totalHosts,
+				ScannedHosts:   int(scanned),
+				ActiveHosts:    int(curICMP),
+				ICMPDiscovered: int(curICMP),
+				Percent:        pct,
+			})
 		})
-	})
 
-	if sweepErr != nil && ctx.Err() == nil {
-		emitProgress(SweepProgressEvent{Stage: StageError})
-		return fmt.Errorf("icmp sweep failed: %w", sweepErr)
+		if sweepErr != nil && ctx.Err() == nil {
+			emitProgress(SweepProgressEvent{
+				Stage:        StageError,
+				ErrorMessage: sweepErr.Error(),
+			})
+			return fmt.Errorf("icmp sweep failed: %w", sweepErr)
+		}
+	} else {
+		// When ICMP pinger is unavailable (e.g. unprivileged Linux without ping_group_range),
+		// all candidate hosts in local subnet are collected for Stage 2 ARP discovery.
+		_ = target.IterateHosts(ctx, func(ip netip.Addr) bool {
+			if cfg.Interface.Prefix.IsValid() && cfg.Interface.Prefix.Contains(ip) && ip != cfg.Interface.Addr {
+				silentIPs = append(silentIPs, ip)
+			}
+			return true
+		})
 	}
 
 	// 5. Stage 2: Kernel-Provoked ARP for Silent Hosts

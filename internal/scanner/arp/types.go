@@ -18,7 +18,7 @@ const (
 	StatusDiscoveredICMP = "Ativo via ICMP"
 
 	// DefaultARPTimeout is the maximum duration to wait for the kernel to resolve ARP entries.
-	DefaultARPTimeout = 1000 * time.Millisecond
+	DefaultARPTimeout = 2500 * time.Millisecond
 	// DefaultPollInterval is the interval between neighbor table checks.
 	DefaultPollInterval = 100 * time.Millisecond
 	// DefaultTriggerPort is an unlikely high UDP port used on Linux to trigger kernel neighbor resolution.

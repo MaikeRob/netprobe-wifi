@@ -22,10 +22,10 @@ export default {
           100: '#f5f5f4',
           200: '#e7e5e4',
           300: '#d6d3d1',
-          400: '#a8a29e',
-          500: '#78716c',
-          600: '#57534e',
-          700: '#44403c',
+          400: '#c4c0bc', // Brighter secondary text (WCAG AAA compliant on #18181c)
+          500: '#a8a29e', // Readable muted text
+          600: '#8c857e', // Subtle borders and icons
+          700: '#57534e',
           800: '#292524',
           900: '#1c1917',
           950: '#0c0a09',

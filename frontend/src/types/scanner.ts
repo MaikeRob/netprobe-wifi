@@ -22,6 +22,7 @@ export interface SweepProgressEvent {
   icmpDiscovered: number;
   arpDiscovered: number;
   percent: number;
+  errorMessage?: string;
 }
 
 export interface SweepSummaryEvent {

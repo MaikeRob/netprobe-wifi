@@ -49,27 +49,27 @@ export const HostTable: React.FC<HostTableProps> = ({ hosts, onSelectHostForPort
       {/* Table Header Controls */}
       <div className="p-3 border-b border-border-subtle flex items-center justify-between gap-3 shrink-0">
         <div className="relative flex-1 max-w-xs">
-          <Search className="w-3.5 h-3.5 text-stone-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-stone-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Filtrar por IP, MAC ou Fabricante..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full bg-stone-900 border border-border-subtle rounded-lg pl-8 pr-3 py-1.5 text-xs text-stone-200 placeholder:text-stone-500 focus:outline-none focus:border-stone-500 transition-colors"
+            className="w-full bg-stone-900 border border-stone-700/80 rounded-lg pl-8 pr-3 py-1.5 text-sm text-stone-100 placeholder:text-stone-400 focus:outline-none focus:border-stone-400 transition-colors shadow-inner"
           />
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-stone-400 font-mono">
+          <span className="text-xs text-stone-200 font-mono font-medium">
             {filteredHosts.length} {filteredHosts.length === 1 ? 'dispositivo' : 'dispositivos'}
           </span>
           {hosts.length > 0 && (
             <button
               onClick={exportCSV}
               title="Exportar tabela para CSV"
-              className="p-1.5 rounded-lg border border-border-subtle bg-stone-900 text-stone-400 hover:text-stone-200 transition-colors"
+              className="p-1.5 rounded-lg border border-stone-700/80 bg-stone-900 text-stone-200 hover:text-stone-100 hover:border-stone-500 transition-colors"
             >
-              <Download className="w-3.5 h-3.5" />
+              <Download className="w-4 h-4" />
             </button>
           )}
         </div>
@@ -78,22 +78,22 @@ export const HostTable: React.FC<HostTableProps> = ({ hosts, onSelectHostForPort
       {/* Table Body (Scrollable) */}
       <div className="flex-1 overflow-auto">
         {filteredHosts.length === 0 ? (
-          <div className="h-48 flex flex-col items-center justify-center text-stone-500 text-xs gap-1.5">
-            <span>Nenhum dispositivo encontrado na varredura.</span>
-            <span className="text-[11px] text-stone-600">
+          <div className="h-48 flex flex-col items-center justify-center text-stone-300 text-sm gap-1.5">
+            <span className="font-medium text-stone-200">Nenhum dispositivo encontrado na varredura.</span>
+            <span className="text-xs text-stone-400">
               Inicie a varredura para visualizar dispositivos ativos em tempo real.
             </span>
           </div>
         ) : (
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-stone-900/50 text-stone-400 sticky top-0 z-10 border-b border-border-subtle">
+          <table className="w-full text-left text-xs sm:text-sm border-collapse">
+            <thead className="bg-stone-900 text-stone-200 sticky top-0 z-10 border-b border-stone-700/80">
               <tr>
-                <th className="py-2.5 px-3 font-medium">Endereço IP</th>
-                <th className="py-2.5 px-3 font-medium">Endereço MAC</th>
-                <th className="py-2.5 px-3 font-medium">Fabricante</th>
-                <th className="py-2.5 px-3 font-medium">Latência</th>
-                <th className="py-2.5 px-3 font-medium">Método</th>
-                <th className="py-2.5 px-3 font-medium text-right">Ação</th>
+                <th className="py-2.5 px-3 font-semibold text-stone-200">Endereço IP</th>
+                <th className="py-2.5 px-3 font-semibold text-stone-200">Endereço MAC</th>
+                <th className="py-2.5 px-3 font-semibold text-stone-200">Fabricante</th>
+                <th className="py-2.5 px-3 font-semibold text-stone-200">Latência</th>
+                <th className="py-2.5 px-3 font-semibold text-stone-200">Método</th>
+                <th className="py-2.5 px-3 font-semibold text-stone-200 text-right">Ação</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border-subtle">
@@ -104,48 +104,48 @@ export const HostTable: React.FC<HostTableProps> = ({ hosts, onSelectHostForPort
                 return (
                   <tr
                     key={host.ip}
-                    className="hover:bg-surface-elevated/40 transition-colors group"
+                    className="hover:bg-surface-elevated/60 transition-colors group"
                   >
                     {/* IP Address */}
-                    <td className="py-2.5 px-3 font-mono font-medium text-stone-200">
+                    <td className="py-2.5 px-3 font-mono font-semibold text-stone-100">
                       {host.ip}
                     </td>
 
                     {/* MAC Address */}
-                    <td className="py-2.5 px-3 font-mono text-stone-300">
-                      {host.mac || <span className="text-stone-600 italic">Desconhecido</span>}
+                    <td className="py-2.5 px-3 font-mono text-stone-200">
+                      {host.mac || <span className="text-stone-400 italic">Desconhecido</span>}
                     </td>
 
                     {/* Vendor / Kind */}
                     <td className="py-2.5 px-3">
                       {isPrivate ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium bg-stone-800 text-stone-300 border border-stone-700/60">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-stone-800 text-stone-200 border border-stone-600">
                           MAC Randômico / Privado
                         </span>
                       ) : host.vendor ? (
-                        <span className="text-stone-200 truncate max-w-xs block" title={host.vendor}>
+                        <span className="text-stone-100 font-medium truncate max-w-xs block" title={host.vendor}>
                           {host.vendor}
                         </span>
                       ) : (
-                        <span className="text-stone-600 italic">Não identificado</span>
+                        <span className="text-stone-400 italic">Não identificado</span>
                       )}
                     </td>
 
                     {/* Latency */}
-                    <td className="py-2.5 px-3 font-mono text-stone-400">
-                      {host.responded ? formatDuration(host.rtt) : <span className="text-stone-600">-</span>}
+                    <td className="py-2.5 px-3 font-mono text-stone-200 font-medium">
+                      {host.responded ? formatDuration(host.rtt) : <span className="text-stone-400">-</span>}
                     </td>
 
                     {/* Discovery Status Badge */}
                     <td className="py-2.5 px-3">
                       {isARP ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-amber-950/30 text-amber-300 border border-amber-900/40">
-                          <ShieldAlert className="w-3 h-3 text-terracotta shrink-0" />
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-amber-950/40 text-amber-200 border border-amber-800/60">
+                          <ShieldAlert className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                           <span>Descoberto via ARP</span>
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-stone-900 text-stone-300 border border-stone-800">
-                          <Radio className="w-3 h-3 text-sage shrink-0" />
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-semibold bg-stone-900 text-stone-100 border border-stone-700/80">
+                          <Radio className="w-3.5 h-3.5 text-sage shrink-0" />
                           <span>Ativo via ICMP</span>
                         </span>
                       )}
@@ -155,9 +155,9 @@ export const HostTable: React.FC<HostTableProps> = ({ hosts, onSelectHostForPort
                     <td className="py-2.5 px-3 text-right">
                       <button
                         onClick={() => onSelectHostForPortScan(host)}
-                        className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-stone-900 hover:bg-stone-800 text-stone-300 border border-border-subtle text-[11px] font-medium transition-colors"
+                        className="inline-flex items-center gap-1.5 px-3 py-1 rounded-md bg-stone-800 hover:bg-stone-700 text-stone-100 border border-stone-600 text-xs font-semibold transition-colors shadow-sm active:scale-95"
                       >
-                        <Terminal className="w-3 h-3" />
+                        <Terminal className="w-3.5 h-3.5" />
                         <span>Portas</span>
                       </button>
                     </td>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"net/netip"
 	"sync"
 	"time"
@@ -159,6 +160,8 @@ func (a *App) StartSweep(cidr string, ifaceName string, rateLimit int, timeoutMs
 	a.isSweeping = true
 	a.mu.Unlock()
 
+	log.Printf("[netprobe] Iniciar varredura: CIDR=%s, Interface=%s (%s), Taxa=%d pps, Timeout=%d ms", cidr, iface.Name, iface.Addr, rateLimit, timeoutMs)
+
 	// Launch background sweep
 	go a.runSweep(ctx, cidr, iface, rateLimit, timeoutMs)
 
@@ -181,14 +184,14 @@ func (a *App) runSweep(ctx context.Context, cidr string, iface netinfo.Interface
 		pinger, err = icmp.NewPinger()
 	}
 	if err != nil {
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "sweep:progress", scanner.SweepProgressEvent{
-				Stage: scanner.StageError,
-			})
-		}
-		return
+		log.Printf("[netprobe] ICMP socket indisponível (%v): executando modo resiliente com ARP provocado pelo kernel", err)
+		pinger = nil
+	} else {
+		log.Printf("[netprobe] ICMP socket inicializado com sucesso (modo ativo)")
 	}
-	defer pinger.Close()
+	if pinger != nil {
+		defer pinger.Close()
+	}
 
 	var arpEngine *arp.Engine
 	if a.arpEngineFactory != nil {
@@ -201,16 +204,24 @@ func (a *App) runSweep(ctx context.Context, cidr string, iface netinfo.Interface
 
 	handlers := scanner.SweepHandlers{
 		OnProgress: func(p scanner.SweepProgressEvent) {
+			log.Printf("[netprobe] Progresso [%s]: %.0f%% (%d/%d escaneados, %d ativos [ICMP: %d, ARP: %d])",
+				p.Stage, p.Percent, p.ScannedHosts, p.TotalHosts, p.ActiveHosts, p.ICMPDiscovered, p.ARPDiscovered)
 			if a.ctx != nil {
 				runtime.EventsEmit(a.ctx, "sweep:progress", p)
 			}
 		},
 		OnBatch: func(b scanner.HostBatchEvent) {
+			for _, h := range b.Hosts {
+				log.Printf("[netprobe] -> Host ativo: IP=%-15s MAC=%-17s Fabricante=%-24s RTT=%-8v Origem=%s",
+					h.IP, h.MAC, h.Vendor, h.RTT, h.DiscoveredBy)
+			}
 			if a.ctx != nil {
 				runtime.EventsEmit(a.ctx, "sweep:batch", b)
 			}
 		},
 		OnSummary: func(s scanner.SweepSummaryEvent) {
+			log.Printf("[netprobe] Varredura CONCLUÍDA em %v: %d hosts ativos encontrados (ICMP: %d, ARP: %d)",
+				s.Duration, s.ActiveHosts, s.ICMPDiscovered, s.ARPDiscovered)
 			if a.ctx != nil {
 				runtime.EventsEmit(a.ctx, "sweep:summary", s)
 			}
@@ -230,7 +241,16 @@ func (a *App) runSweep(ctx context.Context, cidr string, iface netinfo.Interface
 		ARPTimeout:  arp.DefaultARPTimeout,
 	}
 
-	_ = orch.Run(ctx, cfg, handlers)
+	runErr := orch.Run(ctx, cfg, handlers)
+	if runErr != nil && ctx.Err() == nil {
+		log.Printf("[netprobe] ERRO na varredura: %v", runErr)
+		if a.ctx != nil {
+			runtime.EventsEmit(a.ctx, "sweep:progress", scanner.SweepProgressEvent{
+				Stage:        scanner.StageError,
+				ErrorMessage: runErr.Error(),
+			})
+		}
+	}
 }
 
 // CancelSweep immediately aborts the active sweep.
@@ -282,6 +302,8 @@ func (a *App) ScanPorts(targetIP string, startPort, endPort uint16, timeoutMs in
 		timeout = port.DefaultTimeout
 	}
 
+	log.Printf("[netprobe] Iniciar scan de portas TCP para %s: portas %d–%d (timeout %d ms)", target, startPort, endPort, timeoutMs)
+
 	cfg := port.ScanConfig{
 		Target:      target,
 		StartPort:   startPort,
@@ -300,6 +322,8 @@ func (a *App) ScanPorts(targetIP string, startPort, endPort uint16, timeoutMs in
 			runtime.EventsEmit(a.ctx, "port:result", res)
 		}
 	})
+
+	log.Printf("[netprobe] Scan de portas TCP para %s finalizado: %d portas avaliadas (erro: %v)", target, len(results), err)
 
 	return results, err
 }

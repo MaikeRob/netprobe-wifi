@@ -8,6 +8,7 @@ coverage.*
 # Frontend
 frontend/node_modules/
 frontend/dist/
+frontend/*.md5
 
 # Editors / OS
 .idea/

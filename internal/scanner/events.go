@@ -47,6 +47,7 @@ type SweepProgressEvent struct {
 	ICMPDiscovered int        `json:"icmpDiscovered"`
 	ARPDiscovered  int        `json:"arpDiscovered"`
 	Percent        float64    `json:"percent"`
+	ErrorMessage   string     `json:"errorMessage,omitempty"`
 }
 
 // SweepSummaryEvent conveys final execution metrics upon sweep termination.

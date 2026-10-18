@@ -49,6 +49,13 @@ func WithOnHostDiscovered(fn func(HostInfo)) EngineOption {
 	}
 }
 
+// WithFilterSnapshot controls whether pre-scan snapshot filtering is enabled.
+func WithFilterSnapshot(filter bool) EngineOption {
+	return func(e *Engine) {
+		e.filterSnapshot = filter
+	}
+}
+
 // Engine coordinates kernel-provoked ARP discovery and IP-to-MAC resolution.
 type Engine struct {
 	reader           TableReader
@@ -58,6 +65,7 @@ type Engine struct {
 	timeout          time.Duration
 	pollInterval     time.Duration
 	concurrency      int
+	filterSnapshot   bool
 	onHostDiscovered func(HostInfo)
 
 	mu       sync.Mutex
@@ -74,13 +82,14 @@ func NewEngine(reader TableReader, trigger Trigger, db *oui.DB, iface netinfo.In
 	}
 
 	e := &Engine{
-		reader:       reader,
-		trigger:      trigger,
-		ouiDB:        db,
-		iface:        iface,
-		timeout:      DefaultARPTimeout,
-		pollInterval: DefaultPollInterval,
-		concurrency:  50,
+		reader:         reader,
+		trigger:        trigger,
+		ouiDB:          db,
+		iface:          iface,
+		timeout:        DefaultARPTimeout,
+		pollInterval:   DefaultPollInterval,
+		concurrency:    50,
+		filterSnapshot: true,
 	}
 
 	for _, opt := range opts {
@@ -88,6 +97,13 @@ func NewEngine(reader TableReader, trigger Trigger, db *oui.DB, iface netinfo.In
 	}
 
 	return e
+}
+
+// SetFilterSnapshot dynamically toggles snapshot filtering.
+func (e *Engine) SetFilterSnapshot(filter bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.filterSnapshot = filter
 }
 
 // TakeSnapshot records the current state of the neighbor table.
@@ -137,7 +153,7 @@ func (e *Engine) ResolveSilentHosts(ctx context.Context, silentIPs []netip.Addr)
 	snapshot := e.snapshot
 	e.mu.Unlock()
 
-	if snapshot == nil {
+	if e.filterSnapshot && snapshot == nil {
 		// Take snapshot if caller did not explicitly invoke TakeSnapshot()
 		_ = e.TakeSnapshot()
 		e.mu.Lock()
@@ -200,14 +216,14 @@ func (e *Engine) ResolveSilentHosts(ctx context.Context, silentIPs []netip.Addr)
 
 				// Check against pre-scan snapshot:
 				// Discard if it was already completed before the scan
-				if snapshot != nil {
+				if e.filterSnapshot && snapshot != nil {
 					if oldEntry, wasInSnapshot := snapshot[ip]; wasInSnapshot && oldEntry.IsValid {
 						delete(unresolved, ip)
 						continue
 					}
 				}
 
-				// Newly resolved host provoked by ARP!
+				// Resolved host in neighbor table (valid hardware address)
 				host := e.buildHostInfo(ip, entry, StatusDiscoveredARP, false)
 				resolvedHosts[ip] = host
 				delete(unresolved, ip)

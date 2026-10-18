@@ -72,7 +72,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
         <div className="p-4 border-b border-border-subtle space-y-3 shrink-0">
           <div className="grid grid-cols-3 gap-2.5">
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-stone-400">Porta Inicial</label>
+              <label className="text-xs font-semibold text-stone-200">Porta Inicial</label>
               <input
                 type="number"
                 min="1"
@@ -80,11 +80,11 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                 value={startPort}
                 disabled={isScanningPorts}
                 onChange={(e) => setStartPort(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                className="w-full bg-stone-900 border border-border-subtle rounded-lg px-2.5 py-1.5 text-xs text-stone-200 font-mono focus:outline-none focus:border-stone-500 disabled:opacity-50"
+                className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-2.5 py-1.5 text-sm text-stone-100 font-mono focus:outline-none focus:border-stone-400 disabled:opacity-50 shadow-inner"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-stone-400">Porta Final</label>
+              <label className="text-xs font-semibold text-stone-200">Porta Final</label>
               <input
                 type="number"
                 min="1"
@@ -92,11 +92,11 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                 value={endPort}
                 disabled={isScanningPorts}
                 onChange={(e) => setEndPort(Math.min(65535, parseInt(e.target.value, 10) || 1024))}
-                className="w-full bg-stone-900 border border-border-subtle rounded-lg px-2.5 py-1.5 text-xs text-stone-200 font-mono focus:outline-none focus:border-stone-500 disabled:opacity-50"
+                className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-2.5 py-1.5 text-sm text-stone-100 font-mono focus:outline-none focus:border-stone-400 disabled:opacity-50 shadow-inner"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-[11px] font-medium text-stone-400">Timeout (ms)</label>
+              <label className="text-xs font-semibold text-stone-200">Timeout (ms)</label>
               <input
                 type="number"
                 min="200"
@@ -105,7 +105,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                 value={timeoutMs}
                 disabled={isScanningPorts}
                 onChange={(e) => setTimeoutMs(Math.max(200, Math.min(5000, parseInt(e.target.value, 10) || 1000)))}
-                className="w-full bg-stone-900 border border-border-subtle rounded-lg px-2.5 py-1.5 text-xs text-stone-200 font-mono focus:outline-none focus:border-stone-500 disabled:opacity-50"
+                className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-2.5 py-1.5 text-sm text-stone-100 font-mono focus:outline-none focus:border-stone-400 disabled:opacity-50 shadow-inner"
               />
             </div>
           </div>
@@ -119,7 +119,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                 setEndPort(1024);
               }}
               disabled={isScanningPorts}
-              className="px-2 py-0.5 rounded text-[10px] bg-stone-900 border border-border-subtle text-stone-400 hover:text-stone-200"
+              className="px-2.5 py-1 rounded-md text-xs font-medium bg-stone-800 border border-stone-700 text-stone-200 hover:text-stone-100 hover:bg-stone-700 transition-colors"
             >
               1–1024 (Padrão)
             </button>
@@ -130,7 +130,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                 setEndPort(445);
               }}
               disabled={isScanningPorts}
-              className="px-2 py-0.5 rounded text-[10px] bg-stone-900 border border-border-subtle text-stone-400 hover:text-stone-200"
+              className="px-2.5 py-1 rounded-md text-xs font-medium bg-stone-800 border border-stone-700 text-stone-200 hover:text-stone-100 hover:bg-stone-700 transition-colors"
             >
               Serviços Comuns
             </button>
@@ -141,7 +141,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                 setEndPort(8080);
               }}
               disabled={isScanningPorts}
-              className="px-2 py-0.5 rounded text-[10px] bg-stone-900 border border-border-subtle text-stone-400 hover:text-stone-200"
+              className="px-2.5 py-1 rounded-md text-xs font-medium bg-stone-800 border border-stone-700 text-stone-200 hover:text-stone-100 hover:bg-stone-700 transition-colors"
             >
               Até 8080
             </button>
@@ -151,45 +151,45 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
           {!isScanningPorts ? (
             <button
               onClick={handleStart}
-              className="w-full bg-sage hover:bg-sage-hover text-stone-950 font-medium text-xs py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm"
+              className="w-full bg-sage hover:bg-sage-hover text-stone-950 font-semibold text-xs sm:text-sm py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm"
             >
-              <Play className="w-3.5 h-3.5 fill-current" />
+              <Play className="w-4 h-4 fill-current" />
               <span>Escanear Portas</span>
             </button>
           ) : (
             <button
               onClick={onCancelPortScan}
-              className="w-full bg-stone-800 hover:bg-red-950/40 hover:text-red-300 border border-red-900/40 text-stone-300 font-medium text-xs py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all"
+              className="w-full bg-stone-800 hover:bg-red-950/40 hover:text-red-200 border border-red-800/60 text-stone-100 font-semibold text-xs sm:text-sm py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all"
             >
-              <Square className="w-3.5 h-3.5 fill-current" />
+              <Square className="w-4 h-4 fill-current" />
               <span>Cancelar Escaneamento</span>
             </button>
           )}
         </div>
 
         {/* Counter Summary Pills */}
-        <div className="px-4 py-2 bg-stone-900/30 border-b border-border-subtle flex items-center justify-between text-xs shrink-0">
-          <span className="text-stone-400">Resultados</span>
-          <div className="flex items-center gap-2 font-mono text-[11px]">
-            <span className="text-sage">{openCount} abertas</span>
-            <span className="text-stone-600">•</span>
-            <span className="text-terracotta">{filteredCount} filtradas</span>
-            <span className="text-stone-600">•</span>
-            <span className="text-stone-500">{closedCount} fechadas</span>
+        <div className="px-4 py-2.5 bg-stone-900/60 border-b border-border-subtle flex items-center justify-between text-xs shrink-0">
+          <span className="text-stone-200 font-semibold">Resultados</span>
+          <div className="flex items-center gap-2 font-mono text-xs">
+            <span className="text-sage font-bold">{openCount} abertas</span>
+            <span className="text-stone-500">•</span>
+            <span className="text-amber-400 font-bold">{filteredCount} filtradas</span>
+            <span className="text-stone-500">•</span>
+            <span className="text-stone-300 font-bold">{closedCount} fechadas</span>
           </div>
         </div>
 
         {/* Results List */}
         <div className="flex-1 overflow-auto p-3">
           {portResults.length === 0 ? (
-            <div className="h-48 flex flex-col items-center justify-center text-stone-500 text-xs gap-1">
+            <div className="h-48 flex flex-col items-center justify-center text-stone-300 text-sm gap-1.5">
               {isScanningPorts ? (
                 <>
-                  <Activity className="w-4 h-4 animate-spin text-stone-400 mb-1" />
-                  <span>Realizando handshake TCP...</span>
+                  <Activity className="w-5 h-5 animate-spin text-sage mb-1" />
+                  <span className="font-medium text-stone-200">Realizando handshake TCP...</span>
                 </>
               ) : (
-                <span>Clique em Escanear Portas para iniciar.</span>
+                <span className="font-medium text-stone-300">Clique em Escanear Portas para iniciar.</span>
               )}
             </div>
           ) : (
@@ -201,33 +201,33 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                 return (
                   <div
                     key={p.port}
-                    className="flex items-center justify-between p-2 rounded-lg bg-stone-900/50 border border-border-subtle text-xs"
+                    className="flex items-center justify-between p-2.5 rounded-lg bg-stone-900 border border-stone-800 text-xs sm:text-sm"
                   >
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono font-medium text-stone-200 w-12">
+                    <div className="flex items-center gap-2.5">
+                      <span className="font-mono font-bold text-stone-100 w-14">
                         {p.port}
                       </span>
                       {p.service ? (
-                        <span className="text-stone-300 font-medium">{p.service}</span>
+                        <span className="text-stone-100 font-semibold">{p.service}</span>
                       ) : (
-                        <span className="text-stone-600 italic">Desconhecido</span>
+                        <span className="text-stone-400 italic">Desconhecido</span>
                       )}
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-[10px] font-mono text-stone-500">
+                      <span className="text-xs font-mono text-stone-300">
                         {formatDuration(p.latency)}
                       </span>
                       {isOpen ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-sage-subtle text-sage border border-sage/20">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-sage-subtle text-sage border border-sage/30">
                           Aberta
                         </span>
                       ) : isFiltered ? (
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-950/20 text-terracotta border border-amber-900/30">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-amber-950/40 text-amber-300 border border-amber-800/60">
                           Filtrada
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium text-stone-500">
+                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold text-stone-400 bg-stone-800">
                           Fechada
                         </span>
                       )}
