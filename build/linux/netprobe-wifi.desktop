@@ -1,0 +1,9 @@
+[Desktop Entry]
+Name=NetProbe Wi-Fi
+Comment=Mapeador de rede Wi-Fi local em tempo real
+Exec=/usr/bin/netprobe-wifi
+Icon=netprobe-wifi
+Terminal=false
+Type=Application
+Categories=Network;System;Security;
+StartupNotify=true

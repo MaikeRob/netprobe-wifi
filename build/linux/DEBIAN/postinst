@@ -1,0 +1,26 @@
+#!/bin/sh
+set -e
+
+# Post-installation script for netprobe-wifi
+# Applies CAP_NET_RAW to the binary so unprivileged users can execute ICMP sweeps without sudo.
+BIN="/usr/bin/netprobe-wifi"
+
+if [ -f "$BIN" ]; then
+    if command -v setcap >/dev/null 2>&1; then
+        echo "Configuring CAP_NET_RAW for $BIN..."
+        setcap cap_net_raw+ep "$BIN" || {
+            echo "Warning: Could not set cap_net_raw on $BIN. Unprivileged ARP discovery will still function."
+        }
+    fi
+fi
+
+# Update desktop database and icon caches if available
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database -q /usr/share/applications || true
+fi
+
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || true
+fi
+
+exit 0

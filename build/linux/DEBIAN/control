@@ -1,0 +1,11 @@
+Package: netprobe-wifi
+Version: 1.0.0
+Section: net
+Priority: optional
+Architecture: amd64
+Depends: libwebkit2gtk-4.1-0, libgtk-3-0
+Maintainer: NetProbe Team <netprobe@local>
+Description: Real-time local Wi-Fi mapping tool with network packet audit
+ NetProbe Wi-Fi is an academic desktop tool to map local Wi-Fi IPv4 subnets,
+ combining rate-limited ICMP sweep, kernel-provoked ARP discovery for silent
+ hosts, IEEE OUI manufacturer resolution, real-time metrics, and TCP port sweep.

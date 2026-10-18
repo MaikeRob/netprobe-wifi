@@ -91,16 +91,40 @@ npm run build
 - [ADR 0006: Varredura de Portas TCP, Connect Scan e Controle de Concorrência](docs/adr/0006-varredura-portas-tcp.md)
 - [ADR 0007: Orquestração de Varredura, Lotes de Eventos e Wails Backend](docs/adr/0007-orquestracao-lotes-e-wails-backend.md)
 - [ADR 0008: Interface Gráfica em Tempo Real e Estética Minimalista Organic Modernism](docs/adr/0008-interface-grafica-e-estetica-minimalista.md)
+- [ADR 0009: Empacotamento, Distribuição e Execução Multiplataforma](docs/adr/0009-empacotamento-e-distribuicao.md)
 
 ---
 
-## Roteiro e Fases do Projeto
+## Empacotamento e Distribuição
 
-O detalhamento e status das etapas planejadas de implementação estão consolidados em:
-- [Checklist de Fases do Projeto](docs/checklist-fases.md)
+### Linux (Pacote `.deb` e Binário Nativo)
+Para gerar o pacote de instalação `.deb` com aplicação automática da permissão `CAP_NET_RAW` no binário:
+```bash
+chmod +x build/linux/build-deb.sh
+./build/linux/build-deb.sh
+```
+O pacote `.deb` e o binário serão gerados em `build/bin/`.
+
+### Windows (Instalador NSIS e Executável)
+Para gerar o instalador do Windows com download automático do WebView2 Runtime:
+```bash
+chmod +x build/windows/build-windows.sh
+./build/windows/build-windows.sh
+# Ou diretamente via Wails CLI:
+# wails build -platform windows/amd64 -nsis -webview2 download
+```
+
+---
+
+## Roteiros e Guias de Demonstração
+
+- [Roteiro de Demonstração Acadêmica no Wireshark](docs/roteiro-wireshark.md) — Filtros de captura e explicação técnica passo a passo dos 5 elementos.
+- [Roteiro de Testes Manuais em Ambiente Windows](docs/roteiro-testes-windows.md) — Validação sem privilégios de Administrador e teste com o Windows Defender Firewall.
+- [Checklist de Fases do Projeto](docs/checklist-fases.md) — Rastreamento de entregas de todas as fases (1 a 7).
 
 ---
 
 ## Aviso de Uso Ético e Autorizado
 
 Este software foi concebido estritamente para finalidades acadêmicas e diagnósticas em ambientes de rede sob controle do usuário ou com consentimento explícito. O backend implementa proteções nativas que bloqueiam varreduras acidentais contra redes públicas ou contra o próprio host (loopback/broadcast).
+
