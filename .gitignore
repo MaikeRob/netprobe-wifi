@@ -16,3 +16,10 @@ frontend/*.md5
 *.swp
 .DS_Store
 Thumbs.db
+
+# Documentation (internal)
+docs/adr/
+
+# Windows installer build artifacts
+build/windows/installer/
+

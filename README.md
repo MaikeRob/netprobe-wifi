@@ -15,8 +15,7 @@ Aplicativo desktop em tempo real para mapeamento e diagnóstico de redes locais 
 
 ```text
 netprobe-wifi/
-├── docs/
-│   └── adr/                 # Registro de Decisões de Arquitetura (ADRs)
+├── docs/                    # Roteiros de testes e guias de demonstração
 ├── frontend/                # React 19 + TypeScript + Tailwind CSS (Organic Modernism)
 │   ├── src/                 # Componentes, estado e integração Wails
 │   └── wailsjs/             # Bindings gerados automaticamente pelo Wails CLI
@@ -81,19 +80,6 @@ npm run build
 
 ---
 
-## Decisões de Arquitetura (ADRs)
-
-- [ADR 0001: Arquitetura de Camadas e Stack Tecnológica](docs/adr/0001-arquitetura-e-stack.md)
-- [ADR 0002: Base OUI IEEE Embutida e Resolução de Fabricantes](docs/adr/0002-base-oui.md)
-- [ADR 0003: Política de Alvos, Descoberta de Interface e Ausência de Tráfego](docs/adr/0003-politica-de-alvos-e-interface-padrao.md)
-- [ADR 0004: Mecanismo de Varredura ICMP, Multiplexação e Privilégios](docs/adr/0004-mecanismo-icmp-e-privilegios.md)
-- [ADR 0005: ARP Provocado pelo Kernel, Resolução de Vizinhos e Vínculo IP ↔ MAC](docs/adr/0005-arp-provocado-e-tabela-vizinhos.md)
-- [ADR 0006: Varredura de Portas TCP, Connect Scan e Controle de Concorrência](docs/adr/0006-varredura-portas-tcp.md)
-- [ADR 0007: Orquestração de Varredura, Lotes de Eventos e Wails Backend](docs/adr/0007-orquestracao-lotes-e-wails-backend.md)
-- [ADR 0008: Interface Gráfica em Tempo Real e Estética Minimalista Organic Modernism](docs/adr/0008-interface-grafica-e-estetica-minimalista.md)
-- [ADR 0009: Empacotamento, Distribuição e Execução Multiplataforma](docs/adr/0009-empacotamento-e-distribuicao.md)
-
----
 
 ## Empacotamento e Distribuição
 
