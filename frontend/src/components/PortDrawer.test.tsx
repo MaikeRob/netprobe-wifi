@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PortDrawer } from './PortDrawer';
 import { Controls } from './Controls';
+import { Header } from './Header';
 import { DiscoveredHost, PortResult } from '../types/scanner';
 
 const sampleHost: DiscoveredHost = {
@@ -127,9 +128,36 @@ describe('Controls (Network Disconnected Guard)', () => {
       />
     );
 
-    expect(screen.getByText(/Sem conexão de rede ativa:/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nenhuma rede ativa detectada\./i)).toBeInTheDocument();
     const startBtn = screen.getByRole('button', { name: /Iniciar/i });
     expect(startBtn).toBeDisabled();
+  });
+});
+
+describe('Header (On-demand ICMP Permission Popover)', () => {
+  it('keeps layout clean by default and opens help popover only when clicked', () => {
+    const onRefresh = vi.fn();
+    render(
+      <Header
+        capabilities={{ CanSendICMP: false, Reason: 'missing permission' }}
+        isSweeping={false}
+        onRefreshCapabilities={onRefresh}
+      />
+    );
+
+    // Compact pill is shown, popover details are hidden initially
+    const pillButton = screen.getByRole('button', { name: /Ping desativado/i });
+    expect(pillButton).toBeInTheDocument();
+    expect(screen.queryByText('Ativar verificação por Ping')).not.toBeInTheDocument();
+
+    // Clicking the pill opens the floating popover with human-friendly instructions
+    fireEvent.click(pillButton);
+    expect(screen.getByText('Ativar verificação por Ping')).toBeInTheDocument();
+    expect(screen.getByText(/net\.ipv4\.ping_group_range/i)).toBeInTheDocument();
+
+    // Clicking "Verificar novamente" calls refresh and closes popover
+    fireEvent.click(screen.getByRole('button', { name: /Verificar novamente/i }));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
   });
 });
 

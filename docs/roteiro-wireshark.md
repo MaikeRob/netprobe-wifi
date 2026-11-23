@@ -9,9 +9,9 @@
 ## 1. Preparação da Demonstração (Checklist Pré-Apresentação)
 
 1. **Verifique a conexão Wi-Fi:** Confirme que o notebook está conectado à rede Wi-Fi de demonstração. Caso conecte depois de abrir o app, clique no botão **Atualizar** ao lado de *Interface de Rede*.
-2. **Verifique o badge de privilégios ICMP (no Linux):**
-   * No canto superior direito do NetProbe Wi-Fi, confirme que aparece o badge verde **`Privilégios ICMP Ativos`**.
-   * Caso apareça o aviso âmbar **`ICMP Restrito (Modo ARP Ativo)`**, clique em **Copiar comando** no banner da própria interface, execute no terminal (`sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`) e clique em **Verificar novamente**.
+2. **Verifique o indicador no canto superior direito (no Linux):**
+   * Confirme que aparece **`Busca completa ativa`**.
+   * Caso apareça **`Ping desativado · Como ativar`**, clique nele, copie o comando exibido, execute no terminal e clique em **Verificar novamente**.
 3. **Abra o Wireshark** na máquina de apresentação.
 4. **Selecione a interface Wi-Fi ativa** (ex.: `wlp2s0`, `wlan0` no Linux ou `Wi-Fi` no Windows).
 5. **Inicie a captura de pacotes** no Wireshark (ícone de barbatana azul).

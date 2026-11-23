@@ -141,17 +141,17 @@ func (a *App) StartSweep(cidr string, ifaceName string, rateLimit int, timeoutMs
 	a.mu.Lock()
 	if a.isSweeping {
 		a.mu.Unlock()
-		return errors.New("varredura já está em andamento")
+		return errors.New("já existe uma varredura em andamento")
 	}
 
 	ifaces, listErr := a.getInterfaces()
 	if listErr != nil {
 		a.mu.Unlock()
-		return fmt.Errorf("erro ao listar interfaces de rede: %w", listErr)
+		return fmt.Errorf("não foi possível consultar as interfaces de rede: %w", listErr)
 	}
 	if len(ifaces) == 0 {
 		a.mu.Unlock()
-		return errors.New("nenhuma interface de rede Wi-Fi/IPv4 ativa encontrada — verifique se o notebook está conectado à rede")
+		return errors.New("nenhuma conexão de rede ativa foi encontrada. Verifique se o Wi-Fi ou cabo está conectado")
 	}
 
 	// 1. Resolve interface
@@ -168,13 +168,13 @@ func (a *App) StartSweep(cidr string, ifaceName string, rateLimit int, timeoutMs
 		}
 		if !found {
 			a.mu.Unlock()
-			return fmt.Errorf("interface de rede %q não está mais ativa — clique em Atualizar Interfaces", ifaceName)
+			return fmt.Errorf("a interface %q foi desconectada. Atualize a lista de interfaces e tente novamente", ifaceName)
 		}
 	} else {
 		iface, err = netinfo.DefaultInterface(ifaces, a.getRouteSource())
 		if err != nil {
 			a.mu.Unlock()
-			return fmt.Errorf("não foi possível detectar uma interface de rede ativa: %w", err)
+			return fmt.Errorf("não foi possível identificar uma interface de rede ativa: %w", err)
 		}
 	}
 
@@ -300,12 +300,6 @@ func (a *App) runSweep(ctx context.Context, cidr string, iface netinfo.Interface
 	runErr := orch.Run(ctx, cfg, handlers)
 	if runErr != nil && ctx.Err() == nil {
 		slog.Error("sweep failed", "error", runErr)
-		if a.ctx != nil {
-			runtime.EventsEmit(a.ctx, "sweep:progress", scanner.SweepProgressEvent{
-				Stage:        scanner.StageError,
-				ErrorMessage: runErr.Error(),
-			})
-		}
 	}
 }
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { X, Play, Square, Activity, Server, AlertCircle } from 'lucide-react';
 import { DiscoveredHost, PortResult } from '../types/scanner';
 import { formatDuration } from '../lib/utils';
@@ -47,6 +47,17 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
       return diff !== 0 ? diff : a.port - b.port;
     });
   }, [portResults, openPorts, filterMode]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen || !host) return null;
 
@@ -105,10 +116,12 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
         <div className="p-4 border-b border-border-subtle bg-stone-900/40 space-y-2 shrink-0">
           <div className="flex items-baseline justify-between">
             <span className="font-mono text-base font-semibold text-stone-100">{host.ip}</span>
-            <span className="text-xs text-stone-400 font-mono">{host.mac || 'Sem MAC'}</span>
+            <span className="text-xs text-stone-400 font-mono">{host.mac || 'MAC não identificado'}</span>
           </div>
           <div className="text-xs text-stone-400 truncate">
-            {host.vendor || 'Fabricante não identificado'}
+            {host.kind === 'private'
+              ? 'MAC Privado (Aleatório)'
+              : host.vendor || 'Fabricante não identificado'}
           </div>
         </div>
 
@@ -223,7 +236,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
               className="w-full bg-stone-800 hover:bg-red-950/40 hover:text-red-200 border border-red-800/60 text-stone-100 font-semibold text-xs sm:text-sm py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all"
             >
               <Square className="w-4 h-4 fill-current" />
-              <span>Cancelar Escaneamento</span>
+              <span>Parar verificação</span>
             </button>
           )}
         </div>
@@ -269,7 +282,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
               {isScanningPorts ? (
                 <>
                   <Activity className="w-5 h-5 animate-spin text-sage mb-1" />
-                  <span className="font-medium text-stone-200">Realizando handshake TCP...</span>
+                  <span className="font-medium text-stone-200">Verificando portas TCP...</span>
                 </>
               ) : (
                 <span className="font-medium text-stone-300">Clique em Escanear Portas para iniciar.</span>
@@ -285,10 +298,10 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
               ) : (
                 <>
                   <span className="font-medium text-stone-200">
-                    Nenhuma porta TCP aberta encontrada neste intervalo.
+                    Nenhuma porta aberta encontrada neste intervalo.
                   </span>
                   <span className="text-xs text-stone-400">
-                    Foram avaliadas {portResults.length} portas ({closedCount} fechadas, {filteredCount} filtradas).
+                    {portResults.length} portas testadas ({closedCount} fechadas, {filteredCount} filtradas).
                   </span>
                   <button
                     type="button"
@@ -318,7 +331,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                       {p.service ? (
                         <span className="text-stone-100 font-semibold">{p.service}</span>
                       ) : (
-                        <span className="text-stone-400 italic">Desconhecido</span>
+                        <span className="text-stone-500">Serviço não listado</span>
                       )}
                     </div>
 

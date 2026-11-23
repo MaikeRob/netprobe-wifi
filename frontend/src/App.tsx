@@ -27,9 +27,25 @@ import {
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
 function formatErrorMessage(err: unknown): string {
-  if (typeof err === 'string') return err;
-  if (err instanceof Error) return err.message;
-  return String(err);
+  const raw = typeof err === 'string' ? err : err instanceof Error ? err.message : String(err);
+  const lower = raw.toLowerCase();
+
+  if (lower.includes('outside the allowed local subnet')) {
+    return 'Este endereço IP não pertence à rede local conectada.';
+  }
+  if (lower.includes('start port must be')) {
+    return 'Informe um intervalo de portas válido entre 1 e 65535.';
+  }
+  if (lower.includes('timeout must be between')) {
+    return 'O tempo limite deve ficar entre 200 ms e 5000 ms.';
+  }
+  if (lower.includes('non-loopback') || lower.includes('endereço ip inválido')) {
+    return 'Este endereço IP não pode ser verificado.';
+  }
+  if (lower.includes('no default interface') || lower.includes('nenhuma conexão de rede')) {
+    return 'Nenhuma conexão de rede ativa foi encontrada. Verifique se o Wi-Fi ou cabo está conectado.';
+  }
+  return raw;
 }
 
 export const App: React.FC = () => {
@@ -272,6 +288,7 @@ export const App: React.FC = () => {
         {/* Live Discovered Hosts Table */}
         <HostTable
           hosts={hosts}
+          isSweeping={isSweeping}
           onSelectHostForPortScan={(host) => handleSelectHostForPort(host)}
         />
       </main>

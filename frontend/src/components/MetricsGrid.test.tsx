@@ -25,7 +25,7 @@ describe('MetricsGrid', () => {
     };
 
     render(<MetricsGrid progress={progress} isSweeping={true} />);
-    expect(screen.getByText('Estágio 1: Varredura ICMP (Ping Sweep)')).toBeInTheDocument();
+    expect(screen.getByText('Verificando dispositivos via Ping (ICMP)...')).toBeInTheDocument();
     expect(screen.getByText('40%')).toBeInTheDocument();
     expect(screen.getByText('100/254 verificados')).toBeInTheDocument();
     expect(screen.getByText('254')).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe('MetricsGrid', () => {
     };
 
     render(<MetricsGrid progress={progress} isSweeping={false} />);
-    expect(screen.getByText('Varredura Concluída')).toBeInTheDocument();
+    expect(screen.getByText('Varredura concluída')).toBeInTheDocument();
     expect(screen.getByText('100%')).toBeInTheDocument();
     expect(screen.getByText('6')).toBeInTheDocument(); // 10 total - 4 active = 6 offline
   });

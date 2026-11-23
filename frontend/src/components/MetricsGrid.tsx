@@ -1,5 +1,5 @@
 import React from 'react';
-import { ShieldAlert, Radio, Server, CheckCircle2, AlertCircle } from 'lucide-react';
+import { ShieldAlert, Radio, Server, CheckCircle2, AlertCircle, Wifi, MinusCircle } from 'lucide-react';
 import { SweepProgressEvent } from '../types/scanner';
 
 interface MetricsGridProps {
@@ -23,17 +23,17 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ progress, isSweeping }
   const getStageDescription = () => {
     switch (stage) {
       case 'starting':
-        return 'Preparando varredura e snapshot prévio...';
+        return 'Preparando varredura da sub-rede...';
       case 'icmp':
-        return 'Estágio 1: Varredura ICMP (Ping Sweep)';
+        return 'Verificando dispositivos via Ping (ICMP)...';
       case 'arp':
-        return 'Estágio 2: Descoberta via ARP Provocado (Hosts com Firewall)';
+        return 'Sondando dispositivos silenciosos via ARP...';
       case 'finished':
-        return 'Varredura Concluída';
+        return 'Varredura concluída';
       case 'canceled':
-        return 'Varredura Cancelada';
+        return 'Varredura interrompida';
       case 'error':
-        return 'Falha na Varredura';
+        return 'Não foi possível concluir a varredura';
       default:
         return 'Pronto para iniciar';
     }
@@ -76,25 +76,22 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ progress, isSweeping }
           </div>
 
           {stage === 'error' && progress?.errorMessage && (
-            <div className="mt-2.5 p-3 rounded-lg bg-red-950/30 border border-red-900/50 text-red-200 text-xs sm:text-sm space-y-1.5">
-              <div className="font-semibold text-red-100 flex items-center gap-1.5">
-                <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-                <span>Detalhes da falha:</span>
-              </div>
-              <p className="font-mono text-xs text-red-200/90 whitespace-pre-wrap">
+            <div className="mt-2.5 p-3 rounded-lg bg-red-950/30 border border-red-900/50 text-red-200 text-xs sm:text-sm flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <span className="text-red-100 leading-relaxed">
                 {progress.errorMessage}
-              </p>
+              </span>
             </div>
           )}
         </div>
       )}
 
-      {/* 5 Minimalist Metric Cards */}
+      {/* 5 Minimalist Metric Cards with uniform visual alignment */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
         {/* Total Hosts */}
         <div className="bg-surface border border-border-subtle rounded-xl p-3.5 space-y-1">
           <div className="text-xs text-stone-300 font-semibold flex items-center gap-1.5">
-            <Server className="w-3.5 h-3.5 text-stone-400" />
+            <Server className="w-3.5 h-3.5 text-stone-400 shrink-0" />
             <span>Total na Faixa</span>
           </div>
           <div className="text-xl font-bold font-mono text-stone-100">{total}</div>
@@ -102,14 +99,17 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ progress, isSweeping }
 
         {/* Active Hosts */}
         <div className="bg-surface border border-border-subtle rounded-xl p-3.5 space-y-1">
-          <div className="text-xs text-stone-300 font-semibold">Dispositivos Ativos</div>
+          <div className="text-xs text-stone-300 font-semibold flex items-center gap-1.5">
+            <Wifi className="w-3.5 h-3.5 text-stone-300 shrink-0" />
+            <span>Dispositivos Ativos</span>
+          </div>
           <div className="text-xl font-bold font-mono text-stone-100">{active}</div>
         </div>
 
         {/* ICMP Discovered */}
         <div className="bg-surface border border-border-subtle rounded-xl p-3.5 space-y-1">
           <div className="text-xs text-stone-300 font-semibold flex items-center gap-1.5">
-            <Radio className="w-3.5 h-3.5 text-sage" />
+            <Radio className="w-3.5 h-3.5 text-sage shrink-0" />
             <span>Ativos via ICMP</span>
           </div>
           <div className="text-xl font-bold font-mono text-sage">{icmp}</div>
@@ -118,7 +118,7 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ progress, isSweeping }
         {/* ARP Discovered */}
         <div className="bg-surface border border-border-subtle rounded-xl p-3.5 space-y-1">
           <div className="text-xs text-stone-300 font-semibold flex items-center gap-1.5">
-            <ShieldAlert className="w-3.5 h-3.5 text-terracotta" />
+            <ShieldAlert className="w-3.5 h-3.5 text-terracotta shrink-0" />
             <span>Via ARP (Firewall)</span>
           </div>
           <div className="text-xl font-bold font-mono text-terracotta">{arp}</div>
@@ -126,7 +126,10 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ progress, isSweeping }
 
         {/* Inactive / Offline */}
         <div className="bg-surface border border-border-subtle rounded-xl p-3.5 space-y-1 col-span-2 sm:col-span-1">
-          <div className="text-xs text-stone-300 font-semibold">Silenciosos / Offline</div>
+          <div className="text-xs text-stone-300 font-semibold flex items-center gap-1.5">
+            <MinusCircle className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+            <span>Silenciosos / Offline</span>
+          </div>
           <div className="text-xl font-bold font-mono text-stone-300">{offline}</div>
         </div>
       </div>

@@ -57,48 +57,48 @@ export const Controls: React.FC<ControlsProps> = ({
             <label htmlFor="adapter-select" className="text-xs font-semibold text-stone-200">
               Interface de Rede
             </label>
-            <div className="flex items-center gap-2">
-              {selectedAdapter?.mac && (
-                <span className="text-[11px] font-mono text-stone-400" title="Endereço MAC da interface local">
-                  MAC: {selectedAdapter.mac}
-                </span>
-              )}
-              {onRefreshAdapters && (
-                <button
-                  type="button"
-                  onClick={onRefreshAdapters}
-                  disabled={isSweeping}
-                  title="Recarregar interfaces de rede e verificar conexão Wi-Fi"
-                  className="inline-flex items-center gap-1 text-xs text-stone-300 hover:text-stone-100 disabled:opacity-50 transition-colors"
-                >
-                  <RefreshCw className="w-3.5 h-3.5" />
-                  <span>Atualizar</span>
-                </button>
-              )}
-            </div>
-          </div>
-          <select
-            id="adapter-select"
-            value={selectedAdapter?.name || ''}
-            onChange={(e) => {
-              const found = adapters.find((a) => a.name === e.target.value);
-              if (found) onSelectAdapter(found);
-            }}
-            disabled={isSweeping || !hasActiveNetwork}
-            className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-3 py-2 text-sm text-stone-100 font-medium focus:outline-none focus:border-stone-400 disabled:opacity-50 transition-colors shadow-inner"
-          >
-            {!hasActiveNetwork ? (
-              <option value="" className="bg-[#18181c] text-stone-400">
-                Nenhuma interface de rede ativa
-              </option>
-            ) : (
-              adapters.map((a) => (
-                <option key={a.name} value={a.name} className="bg-[#18181c] text-stone-100 font-sans py-2">
-                  {a.name} {a.ip ? `(${a.ip})` : ''} {a.cidr ? `[${a.cidr}]` : ''}
-                </option>
-              ))
+            {selectedAdapter?.mac && (
+              <span className="text-[11px] font-mono text-stone-400" title="Endereço físico (MAC) desta interface">
+                {selectedAdapter.mac}
+              </span>
             )}
-          </select>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <select
+              id="adapter-select"
+              value={selectedAdapter?.name || ''}
+              onChange={(e) => {
+                const found = adapters.find((a) => a.name === e.target.value);
+                if (found) onSelectAdapter(found);
+              }}
+              disabled={isSweeping || !hasActiveNetwork}
+              className="flex-1 min-w-0 bg-stone-900 border border-stone-700/80 rounded-lg px-3 py-2 text-sm text-stone-100 font-medium focus:outline-none focus:border-stone-400 disabled:opacity-50 transition-colors shadow-inner"
+            >
+              {!hasActiveNetwork ? (
+                <option value="" className="bg-[#18181c] text-stone-400">
+                  Nenhuma interface conectada
+                </option>
+              ) : (
+                adapters.map((a) => (
+                  <option key={a.name} value={a.name} className="bg-[#18181c] text-stone-100 font-sans py-2">
+                    {a.name} {a.ip ? `— ${a.ip}` : ''}
+                  </option>
+                ))
+              )}
+            </select>
+            {onRefreshAdapters && (
+              <button
+                type="button"
+                onClick={onRefreshAdapters}
+                disabled={isSweeping}
+                aria-label="Atualizar interfaces de rede"
+                title="Atualizar interfaces de rede"
+                className="p-2.5 rounded-lg bg-stone-900 border border-stone-700/80 text-stone-300 hover:text-stone-100 hover:border-stone-500 disabled:opacity-50 transition-colors shrink-0"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
 
         {/* CIDR Input Field */}
@@ -111,6 +111,11 @@ export const Controls: React.FC<ControlsProps> = ({
             type="text"
             value={cidr}
             onChange={(e) => onChangeCIDR(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !isSweeping && hasActiveNetwork && cidr.trim()) {
+                onStartSweep();
+              }
+            }}
             disabled={isSweeping}
             placeholder="192.168.1.0/24"
             className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-3 py-2 text-sm text-stone-100 font-mono focus:outline-none focus:border-stone-400 placeholder:text-stone-400 disabled:opacity-50 transition-colors shadow-inner"
@@ -123,7 +128,7 @@ export const Controls: React.FC<ControlsProps> = ({
             <button
               onClick={onStartSweep}
               disabled={!hasActiveNetwork || !cidr.trim()}
-              title={!hasActiveNetwork ? 'Conecte-se a uma rede Wi-Fi ativa para iniciar' : 'Iniciar varredura da rede'}
+              title={!hasActiveNetwork ? 'Conecte-se a uma rede para iniciar' : 'Iniciar varredura da rede'}
               className="flex-1 bg-sage hover:bg-sage-hover disabled:opacity-40 disabled:pointer-events-none text-stone-950 font-semibold text-xs sm:text-sm px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]"
             >
               <Play className="w-4 h-4 fill-current" />
@@ -141,7 +146,7 @@ export const Controls: React.FC<ControlsProps> = ({
 
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
-            title="Opções avançadas de taxa e timeout"
+            title="Ajustar taxa de envio e tempo limite"
             className={`p-2 rounded-lg border text-xs transition-colors ${
               showAdvanced
                 ? 'bg-stone-800 border-stone-500 text-stone-100'
@@ -156,10 +161,10 @@ export const Controls: React.FC<ControlsProps> = ({
       {/* No Active Network Warning Banner */}
       {!hasActiveNetwork && (
         <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg bg-red-950/35 border border-red-800/60 text-red-200 text-xs sm:text-sm">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <WifiOff className="w-4 h-4 shrink-0 text-red-400" />
             <span>
-              <strong className="text-red-100">Sem conexão de rede ativa:</strong> Nenhuma interface IPv4/Wi-Fi conectada foi encontrada no notebook. Conecte-se ao Wi-Fi e clique em <strong>Atualizar</strong>.
+              <strong className="text-red-100">Nenhuma rede ativa detectada.</strong> Conecte-se a uma rede Wi-Fi ou local e clique em atualizar.
             </span>
           </div>
           {onRefreshAdapters && (
@@ -177,10 +182,10 @@ export const Controls: React.FC<ControlsProps> = ({
 
       {/* Large Range Warning Banner */}
       {isLargeRange && (
-        <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-amber-950/30 border border-amber-800/60 text-amber-200 text-xs sm:text-sm">
+        <div className="flex items-center gap-2.5 px-3.5 py-2.5 rounded-lg bg-amber-950/30 border border-amber-800/60 text-amber-200 text-xs sm:text-sm">
           <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
           <span>
-            <strong className="text-amber-100">Aviso de escala:</strong> Redes com máscara menor que /20 contêm milhares de endereços e podem levar alguns minutos para concluir.
+            Esta faixa contém muitos endereços. A varredura completa pode levar alguns minutos.
           </span>
         </div>
       )}
@@ -190,8 +195,8 @@ export const Controls: React.FC<ControlsProps> = ({
         <div className="pt-3 border-t border-border-subtle grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs text-stone-300 font-medium">
-              <span>Taxa de Emissão (Pacotes/s)</span>
-              <span className="font-mono text-stone-100 font-semibold">{rateLimit} pps</span>
+              <span>Velocidade de envio</span>
+              <span className="font-mono text-stone-100 font-semibold">{rateLimit} pacotes/s</span>
             </div>
             <input
               type="range"
@@ -207,7 +212,7 @@ export const Controls: React.FC<ControlsProps> = ({
 
           <div className="space-y-1.5">
             <div className="flex justify-between text-xs text-stone-300 font-medium">
-              <span>Timeout de Resposta</span>
+              <span>Tempo limite de resposta</span>
               <span className="font-mono text-stone-100 font-semibold">{timeoutMs} ms</span>
             </div>
             <input

@@ -2,8 +2,10 @@ package scanner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -65,7 +67,7 @@ func (o *Orchestrator) Run(ctx context.Context, cfg OrchestratorConfig, handlers
 		if handlers.OnProgress != nil {
 			handlers.OnProgress(SweepProgressEvent{
 				Stage:        StageError,
-				ErrorMessage: fmt.Sprintf("Faixa de rede inválida ou não autorizada: %v", err),
+				ErrorMessage: formatTargetError(cfg.CIDR, err),
 			})
 		}
 		return fmt.Errorf("validating target %q: %w", cfg.CIDR, err)
@@ -132,7 +134,7 @@ func (o *Orchestrator) Run(ctx context.Context, cfg OrchestratorConfig, handlers
 		if err != nil {
 			emitProgress(SweepProgressEvent{
 				Stage:        StageError,
-				ErrorMessage: fmt.Sprintf("Inicializando motor ICMP: %v", err),
+				ErrorMessage: formatSweepConfigError(err),
 			})
 			return fmt.Errorf("initializing icmp sweep engine: %w", err)
 		}
@@ -194,7 +196,7 @@ func (o *Orchestrator) Run(ctx context.Context, cfg OrchestratorConfig, handlers
 		if sweepErr != nil && ctx.Err() == nil {
 			emitProgress(SweepProgressEvent{
 				Stage:        StageError,
-				ErrorMessage: sweepErr.Error(),
+				ErrorMessage: "Não foi possível concluir a verificação da rede. Verifique sua conexão e tente novamente.",
 			})
 			return fmt.Errorf("icmp sweep failed: %w", sweepErr)
 		}
@@ -306,4 +308,34 @@ func (o *Orchestrator) Run(ctx context.Context, cfg OrchestratorConfig, handlers
 	}
 
 	return ctx.Err()
+}
+
+func formatTargetError(cidr string, err error) string {
+	if errors.Is(err, netinfo.ErrInvalidCIDR) {
+		return fmt.Sprintf("O endereço %q não está no formato de rede esperado. Use o formato IP/máscara (exemplo: 192.168.1.0/24).", cidr)
+	}
+	if errors.Is(err, netinfo.ErrNotIPv4) {
+		return "Informe um endereço de rede IPv4 válido (exemplo: 192.168.1.0/24)."
+	}
+	msg := err.Error()
+	switch {
+	case strings.Contains(msg, "loopback"):
+		return "O endereço local da própria máquina (127.0.0.0/8) não pode ser escaneado."
+	case strings.Contains(msg, "multicast"):
+		return "Endereços de transmissão em grupo (multicast) não podem ser escaneados."
+	case strings.Contains(msg, "public IP"):
+		return "Por segurança, apenas redes locais privadas podem ser escaneadas."
+	default:
+		return fmt.Sprintf("A faixa de rede %q não é permitida. Informe uma sub-rede local válida.", cidr)
+	}
+}
+
+func formatSweepConfigError(err error) string {
+	if errors.Is(err, icmp.ErrInvalidRateLimit) {
+		return "A velocidade de envio deve ficar entre 10 e 500 pacotes por segundo."
+	}
+	if errors.Is(err, icmp.ErrInvalidTimeout) {
+		return "O tempo limite de resposta deve ficar entre 200 ms e 5000 ms."
+	}
+	return "Não foi possível iniciar a verificação com os parâmetros informados."
 }
