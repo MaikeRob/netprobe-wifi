@@ -6,13 +6,16 @@
 
 ---
 
-## 1. Preparação da Demonstração
+## 1. Preparação da Demonstração (Checklist Pré-Apresentação)
 
-1. **Abra o Wireshark** na máquina de apresentação.
-2. **Selecione a interface Wi-Fi ativa** (ex.: `wlp2s0`, `wlan0` no Linux ou `Wi-Fi` no Windows).
-3. **Inicie a captura de pacotes** no Wireshark (ícone de barbatana azul).
-4. **Abra o NetProbe Wi-Fi**.
-5. Verifique se a interface selecionada no aplicativo corresponde à interface sendo capturada no Wireshark.
+1. **Verifique a conexão Wi-Fi:** Confirme que o notebook está conectado à rede Wi-Fi de demonstração. Caso conecte depois de abrir o app, clique no botão **Atualizar** ao lado de *Interface de Rede*.
+2. **Verifique o badge de privilégios ICMP (no Linux):**
+   * No canto superior direito do NetProbe Wi-Fi, confirme que aparece o badge verde **`Privilégios ICMP Ativos`**.
+   * Caso apareça o aviso âmbar **`ICMP Restrito (Modo ARP Ativo)`**, clique em **Copiar comando** no banner da própria interface, execute no terminal (`sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"`) e clique em **Verificar novamente**.
+3. **Abra o Wireshark** na máquina de apresentação.
+4. **Selecione a interface Wi-Fi ativa** (ex.: `wlp2s0`, `wlan0` no Linux ou `Wi-Fi` no Windows).
+5. **Inicie a captura de pacotes** no Wireshark (ícone de barbatana azul).
+6. Confirme no **NetProbe Wi-Fi** que a interface selecionada e a faixa `/24` sugerida correspondem à interface monitorada no Wireshark.
 
 ---
 
@@ -31,7 +34,7 @@ icmp.type == 8 || icmp.type == 0
 #### Passos na UI:
 1. Configure a faixa (ex.: `192.168.1.0/24`).
 2. Defina a taxa para `50` ou `100` pacotes/s e timeout de `1000 ms`.
-3. Clique em **Iniciar Varredura**.
+3. Clique em **Iniciar**.
 
 #### O que explicar e apontar no Wireshark:
 * **Echo Request (`icmp.type == 8`):** Aponte os pacotes saindo sequencialmente no ritmo exato do *rate limiter* configurado (sem sobrecarregar o ponto de acesso Wi-Fi).
@@ -51,20 +54,20 @@ arp || (udp.dstport == 38472)
 ```
 
 #### O que explicar e apontar no Wireshark:
-1. **O Gatilho UDP Unicast:**
-   * Explique: *"Para os IPs que não responderam ao ICMP Echo no Elemento 1, o NetProbe dispara um datagrama UDP unicast para uma porta alta fechada (`38472`)"*.
-   * Mostre o pacote UDP no Wireshark.
-2. **A Reação Automática do Kernel:**
-   * Aponte no Wireshark: Imediatamente após o envio do UDP, o próprio kernel do sistema operacional (Linux ou Windows) emite automaticamente na camada de enlace (L2):
+1. **Como o NetProbe provoca a resolução ARP por Sistema Operacional:**
+   * **No Linux:** Explique: *"Para os IPs da sub-rede local que não responderam ao ICMP Echo no Elemento 1, o NetProbe dispara um datagrama UDP curto de 1 byte para uma porta alta (`38472`). Ao tentar rotear esse datagrama na camada 2, o kernel Linux emite automaticamente o `ARP Request`."*
+   * **No Windows:** Explique: *"No Windows, o NetProbe invoca a API nativa `SendARP` (`iphlpapi.dll`), que instrui a pilha NDIS do Windows a emitir o `ARP Request` diretamente na camada de enlace sem precisar de pacote UDP."*
+2. **A Reação na Camada de Enlace (L2):**
+   * Aponte no Wireshark os quadros ARP emitidos pelo sistema operacional:
      ```text
      ARP Request: Who has 192.168.1.X? Tell 192.168.1.Y
      ```
-   * O host silencioso responde com:
+   * O host silencioso (que havia bloqueado o PING na camada 3) responde obrigatoriamente na camada 2 com:
      ```text
      ARP Reply: 192.168.1.X is at [Endereço MAC]
      ```
 3. **Resultado na UI:**
-   * Mostre que o host aparece na tabela com a tag visual âmbar **`ARP (Silencioso)`** ou **`Firewall`**, evidenciando que foi descoberto na camada 2 mesmo sem responder ao ICMP da camada 3.
+   * Mostre que o host aparece na tabela com a badge âmbar **`Descoberto via ARP`** (e contabilizado no card **`Via ARP (Firewall)`**), comprovando que o dispositivo está online na rede local mesmo bloqueando requisições PING.
 
 ---
 
@@ -86,7 +89,7 @@ arp.opcode == 2
 4. Aponte para a linha correspondente na tabela da UI do NetProbe:
    * Mostre que o fabricante identificado (ex.: `ZTE Corporation`, `Apple`, `Intel`) é idêntico ao registrado no Wireshark.
    * Explique que a base OUI da IEEE está **comprimida e embutida no binário** com busca binária $\mathcal{O}(\log N)$, operando offline sem fazer nenhuma requisição HTTP externa.
-5. Se algum smartphone na rede usar MAC aleatório (recurso de privacidade moderno), mostre que o NetProbe detecta o bit localmente administrado e rotula como **`Privado / Aleatório`**.
+5. Se algum smartphone na rede usar MAC aleatório (recurso de privacidade moderno), mostre que o NetProbe detecta o bit localmente administrado e rotula como **`MAC Randômico / Privado`**.
 
 ---
 
@@ -97,11 +100,11 @@ A reatividade da aplicação durante a varredura, com contadores atômicos, barr
 
 #### Passos na UI:
 1. Inicie a varredura e observe os componentes:
-   * **Contadores de Métricas:** Ativos Totais, Hosts ICMP, Hosts ARP/Firewall e RTT Médio atualizando em tempo real.
-   * **Barra de Progresso:** Atualização percentual precisa da sub-rede.
+   * **Contadores de Métricas:** `Total na Faixa`, `Dispositivos Ativos`, `Ativos via ICMP`, `Via ARP (Firewall)` e `Silenciosos / Offline` atualizando em tempo real.
+   * **Barra de Progresso:** Atualização percentual precisa da sub-rede com contador de hosts verificados (`X/Y verificados`).
    * **Tabela de Hosts:** Novos hosts entrando em lotes suaves (agrupamento a cada ~100 ms via `EventAggregator` no Go).
-2. Demonstre o botão de **Cancelar Varredura**:
-   * Clique em Cancelar durante a varredura.
+2. Demonstre o botão **Cancelar**:
+   * Clique em **Cancelar** durante a varredura.
    * No Wireshark, aponte que os pacotes param de ser emitidos instantaneamente (graças ao cancelamento gracioso via `context.Context` do Go).
 
 ---
@@ -147,5 +150,5 @@ tcp.flags.syn == 1
 ## 4. Destaques Conceituais para Apresentar à Banca
 
 1. **Arquitetura Zero-Driver:** Não usamos CGO no scanner e não exigimos a instalação de drivers externos invasivos (como Npcap ou WinPcap). Tudo é implementado sobre as APIs e sockets padrão do sistema operacional.
-2. **Segurança por Padrão:** O backend rejeita ativamente varreduras fora das faixas privadas (RFC 1918 / Link-Local) e restringe o CIDR a `/22` (máximo de 1.022 hosts), impedindo abusos ou ataques a redes externas.
+2. **Segurança por Padrão:** O backend rejeita ativamente varreduras fora das faixas privadas (RFC 1918 / Link-Local / CGNAT local), sugere automaticamente a sub-rede `/24` local (`SuggestPrefix`), emite alerta visual de escala para faixas mais abertas que `/20` (ADR 0003) e enumera alvos em streaming (`IterateHosts`) para impedir abusos ou esgotamento de memória.
 3. **Alta Performance Offline:** A base de fabricantes IEEE com mais de 50.000 registros ocupa menos de 1 MB de memória RAM e executa em microssegundos via busca binária.

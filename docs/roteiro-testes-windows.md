@@ -36,12 +36,12 @@
 
 | Etapa | Teste | Comportamento Esperado | Status |
 |---|---|---|---|
-| **1. Interfaces** | Abertura do app | A interface Wi-Fi é detectada automaticamente com IP e CIDR correto (ex.: `192.168.1.15/24`) | [ ] |
-| **2. ICMP (Elem. 1)** | Iniciar varredura `/24` | Os pings são disparados via `IcmpSendEcho` (`iphlpapi.dll`). Hosts que aceitam ping respondem com RTT medido. | [ ] |
-| **3. ARP (Elem. 2)** | Varredura de hosts silenciosos | Dispositivos que bloqueiam ping são provocados via UDP e descobertos na tabela de vizinhos do Windows (`GetIpNetTable`). | [ ] |
-| **4. OUI (Elem. 3)** | Resolução de fabricante | MACs válidos exibem fabricante real; smartphones com MAC aleatório exibem tag `Privado / Aleatório`. | [ ] |
+| **1. Interfaces** | Abertura do app | A interface Wi-Fi é detectada automaticamente com IP, MAC e CIDR `/24` sugerido (ex.: `192.168.1.0/24`) | [ ] |
+| **2. ICMP (Elem. 1)** | Iniciar varredura `/24` | Os pings são disparados via `IcmpSendEcho` (`iphlpapi.dll`). Hosts que aceitam ping respondem com RTT medido e badge `Ativo via ICMP`. | [ ] |
+| **3. ARP (Elem. 2)** | Varredura de hosts silenciosos | Dispositivos que bloqueiam ping são sondados via `SendARP` (`iphlpapi.dll`) e descobertos na tabela de vizinhos (`GetIpNetTable`) com badge `Descoberto via ARP`. | [ ] |
+| **4. OUI (Elem. 3)** | Resolução de fabricante | MACs válidos exibem fabricante real; smartphones com MAC aleatório exibem badge `MAC Randômico / Privado`. | [ ] |
 | **5. UI (Elem. 4)** | Reatividade e contadores | Barra de progresso atualiza continuamente; cancelamento interrompe a varredura imediatamente. | [ ] |
-| **6. Portas (Elem. 5)** | Selecionar host e escanear portas `80, 443` | Drawer lateral abre; portas abertas e serviços são listados com tempos de resposta. | [ ] |
+| **6. Portas (Elem. 5)** | Selecionar host e escanear portas | Drawer lateral abre na aba `Abertas`; portas abertas e serviços são listados no topo com tempos de resposta. | [ ] |
 
 ---
 
@@ -51,8 +51,8 @@ O Windows é o ambiente ideal para comprovar a eficácia do Elemento 2 (ARP Prov
 1. Por padrão, o **Windows Defender Firewall** bloqueia pacotes ICMP Echo de entrada no perfil de rede pública.
 2. Em uma máquina Windows alvo com firewall ativado:
    * O NetProbe envia ICMP Echo Request -> o alvo descarta silenciosamente.
-   * O NetProbe envia o pacote UDP de gatilho para a porta 38472 -> o kernel do Windows alvo responde ao ARP Request.
-   * O host aparece na tabela do NetProbe rotulado com a badge âmbar **`ARP (Silencioso)`**.
+   * No Estágio 2, o NetProbe aciona `SendARP` (`iphlpapi.dll`) no Windows (ou o pacote UDP na porta `38472` quando executado a partir do Linux) -> a pilha de rede do alvo responde obrigatoriamente ao `ARP Request` com seu endereço MAC.
+   * O host aparece na tabela do NetProbe rotulado com a badge âmbar **`Descoberto via ARP`** (e permanece sendo detectado mesmo em varreduras repetidas consecutivas).
 3. Isso comprova para a banca que o NetProbe mapeia hosts reais mesmo quando ferramentas tradicionais como o `ping` reportam que o host está offline.
 
 ---
