@@ -8,7 +8,7 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 # Ensure Node & Go toolchain paths
 export PATH="${HOME}/.nvm/versions/node/$(ls -1 ${HOME}/.nvm/versions/node 2>/dev/null | tail -n 1)/bin:/usr/local/go/bin:${HOME}/go/bin:${PATH}"
 
-VERSION="1.0.0"
+VERSION="1.1.0"
 ARCH="amd64"
 DEB_NAME="netprobe-wifi_${VERSION}_${ARCH}.deb"
 BIN_NAME="netprobe-wifi"

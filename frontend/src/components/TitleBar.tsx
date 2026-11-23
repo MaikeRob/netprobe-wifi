@@ -11,7 +11,7 @@ export const TitleBar: React.FC = () => {
           <Wifi className="w-3.5 h-3.5" />
         </div>
         <span className="text-xs font-semibold tracking-wide text-stone-100">NetProbe Wi-Fi</span>
-        <span className="text-xs text-stone-300 font-mono px-2 py-0.5 rounded bg-stone-900 border border-stone-700/80">v1.0</span>
+        <span className="text-xs text-stone-300 font-mono px-2 py-0.5 rounded bg-stone-900 border border-stone-700/80">v1.1</span>
       </div>
 
       {/* Window Controls (No-Drag) */}

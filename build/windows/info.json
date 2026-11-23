@@ -2,13 +2,13 @@
   "FixedFileInfo": {
     "FileVersion": {
       "Major": 1,
-      "Minor": 0,
+      "Minor": 1,
       "Patch": 0,
       "Build": 0
     },
     "ProductVersion": {
       "Major": 1,
-      "Minor": 0,
+      "Minor": 1,
       "Patch": 0,
       "Build": 0
     },
@@ -22,12 +22,12 @@
     "Comments": "Real-time local Wi-Fi mapping tool",
     "CompanyName": "netprobe-wifi",
     "FileDescription": "NetProbe Wi-Fi",
-    "FileVersion": "1.0.0.0",
+    "FileVersion": "1.1.0.0",
     "InternalName": "netprobe-wifi",
     "LegalCopyright": "Copyright 2026",
     "OriginalFilename": "netprobe-wifi.exe",
     "ProductName": "NetProbe Wi-Fi",
-    "ProductVersion": "1.0.0.0"
+    "ProductVersion": "1.1.0.0"
   },
   "VarFileInfo": {
     "Translation": {
