@@ -22,7 +22,8 @@ trap cleanup EXIT
 
 echo "=== 1. Building production binary with Wails ==="
 cd "${PROJECT_ROOT}"
-wails build -tags webkit2_41 -clean -o "${BIN_NAME}"
+rm -f "${OUTPUT_DIR}/${BIN_NAME}" "${OUTPUT_DIR}/${DEB_NAME}"
+wails build -tags webkit2_41 -o "${BIN_NAME}"
 
 PROD_BIN="${OUTPUT_DIR}/${BIN_NAME}"
 if [ ! -f "${PROD_BIN}" ]; then
@@ -35,10 +36,12 @@ mkdir -p "${STAGING_DIR}/DEBIAN"
 mkdir -p "${STAGING_DIR}/usr/bin"
 mkdir -p "${STAGING_DIR}/usr/share/applications"
 mkdir -p "${STAGING_DIR}/usr/share/icons/hicolor/256x256/apps"
+find "${STAGING_DIR}" -type d -exec chmod 755 {} +
 
 # Copy control and postinst
 cp "${PROJECT_ROOT}/build/linux/DEBIAN/control" "${STAGING_DIR}/DEBIAN/"
 cp "${PROJECT_ROOT}/build/linux/DEBIAN/postinst" "${STAGING_DIR}/DEBIAN/"
+chmod 644 "${STAGING_DIR}/DEBIAN/control"
 chmod 755 "${STAGING_DIR}/DEBIAN/postinst"
 
 # Copy binary

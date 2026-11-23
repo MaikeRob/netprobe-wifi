@@ -11,7 +11,8 @@ export PATH="${HOME}/.nvm/versions/node/$(ls -1 ${HOME}/.nvm/versions/node 2>/de
 cd "${PROJECT_ROOT}"
 
 echo "=== Building NetProbe Wi-Fi for Windows (AMD64) with NSIS installer ==="
-wails build -platform windows/amd64 -nsis -webview2 download -clean
+rm -f "${PROJECT_ROOT}/build/bin/netprobe-wifi.exe" "${PROJECT_ROOT}/build/bin/netprobe-wifi-amd64-installer.exe"
+wails build -platform windows/amd64 -nsis -webview2 download
 
 echo ""
 echo "=== Windows build complete! Check build/bin/ for netprobe-wifi.exe and installer ==="
