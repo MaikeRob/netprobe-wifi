@@ -11,10 +11,14 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ progress, isSweeping }
   const stage = progress?.stage || 'starting';
   const percent = progress ? Math.min(100, Math.max(0, Math.round(progress.percent))) : 0;
   const total = progress?.totalHosts || 0;
+  const scanned = progress?.scannedHosts || 0;
   const active = progress?.activeHosts || 0;
   const icmp = progress?.icmpDiscovered || 0;
   const arp = progress?.arpDiscovered || 0;
-  const offline = Math.max(0, total - active);
+  const offline =
+    stage === 'icmp' || stage === 'starting'
+      ? Math.max(0, scanned - active)
+      : Math.max(0, total - active);
 
   const getStageDescription = () => {
     switch (stage) {
@@ -46,7 +50,14 @@ export const MetricsGrid: React.FC<MetricsGridProps> = ({ progress, isSweeping }
               {stage === 'error' && <AlertCircle className="w-4 h-4 text-red-400" />}
               {getStageDescription()}
             </span>
-            <span className="font-mono text-stone-200 font-semibold">{percent}%</span>
+            <div className="flex items-center gap-2.5 font-mono">
+              {total > 0 && (
+                <span className="text-xs text-stone-400">
+                  {scanned}/{total} verificados
+                </span>
+              )}
+              <span className="text-stone-200 font-semibold">{percent}%</span>
+            </div>
           </div>
 
           <div className="h-2 w-full bg-stone-900 rounded-full overflow-hidden border border-border-subtle">

@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { X, Play, Square, Activity, Server } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { X, Play, Square, Activity, Server, AlertCircle } from 'lucide-react';
 import { DiscoveredHost, PortResult } from '../types/scanner';
 import { formatDuration } from '../lib/utils';
 
@@ -11,7 +11,10 @@ interface PortDrawerProps {
   onCancelPortScan: () => void;
   isScanningPorts: boolean;
   portResults: PortResult[];
+  errorMessage?: string | null;
 }
+
+type PortFilterMode = 'open' | 'all';
 
 export const PortDrawer: React.FC<PortDrawerProps> = ({
   isOpen,
@@ -21,20 +24,61 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
   onCancelPortScan,
   isScanningPorts,
   portResults,
+  errorMessage,
 }) => {
-  const [startPort, setStartPort] = useState(1);
-  const [endPort, setEndPort] = useState(1024);
-  const [timeoutMs, setTimeoutMs] = useState(1000);
+  const [startPortInput, setStartPortInput] = useState('1');
+  const [endPortInput, setEndPortInput] = useState('1024');
+  const [timeoutInput, setTimeoutInput] = useState('1000');
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [filterMode, setFilterMode] = useState<PortFilterMode>('open');
+
+  const openPorts = useMemo(() => portResults.filter((p) => p.state === 'open'), [portResults]);
+  const filteredCount = useMemo(() => portResults.filter((p) => p.state === 'filtered').length, [portResults]);
+  const closedCount = useMemo(() => portResults.filter((p) => p.state === 'closed').length, [portResults]);
+
+  // Sort open ports to the top when viewing "all", and keep ascending port order within each state group
+  const displayedPorts = useMemo(() => {
+    if (filterMode === 'open') {
+      return openPorts;
+    }
+    const rank = (state: string) => (state === 'open' ? 0 : state === 'filtered' ? 1 : 2);
+    return [...portResults].sort((a, b) => {
+      const diff = rank(a.state) - rank(b.state);
+      return diff !== 0 ? diff : a.port - b.port;
+    });
+  }, [portResults, openPorts, filterMode]);
 
   if (!isOpen || !host) return null;
 
-  const openCount = portResults.filter((p) => p.state === 'open').length;
-  const filteredCount = portResults.filter((p) => p.state === 'filtered').length;
-  const closedCount = portResults.filter((p) => p.state === 'closed').length;
-
   const handleStart = () => {
+    const startPort = parseInt(startPortInput, 10);
+    const endPort = parseInt(endPortInput, 10);
+    const timeoutMs = parseInt(timeoutInput, 10);
+
+    if (isNaN(startPort) || isNaN(endPort) || startPort < 1 || endPort > 65535) {
+      setValidationError('As portas inicial e final devem estar entre 1 e 65535.');
+      return;
+    }
+    if (startPort > endPort) {
+      setValidationError('A porta inicial não pode ser maior que a porta final.');
+      return;
+    }
+    if (isNaN(timeoutMs) || timeoutMs < 200 || timeoutMs > 5000) {
+      setValidationError('O timeout deve estar entre 200 ms e 5000 ms.');
+      return;
+    }
+
+    setValidationError(null);
     onStartPortScan(host.ip, startPort, endPort, timeoutMs);
   };
+
+  const applyPreset = (start: number, end: number) => {
+    setStartPortInput(String(start));
+    setEndPortInput(String(end));
+    setValidationError(null);
+  };
+
+  const activeError = validationError || errorMessage;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm transition-opacity">
@@ -72,39 +116,57 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
         <div className="p-4 border-b border-border-subtle space-y-3 shrink-0">
           <div className="grid grid-cols-3 gap-2.5">
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-stone-200">Porta Inicial</label>
+              <label htmlFor="start-port-input" className="text-xs font-semibold text-stone-200">
+                Porta Inicial
+              </label>
               <input
+                id="start-port-input"
                 type="number"
                 min="1"
                 max="65535"
-                value={startPort}
+                value={startPortInput}
                 disabled={isScanningPorts}
-                onChange={(e) => setStartPort(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                onChange={(e) => {
+                  setStartPortInput(e.target.value);
+                  setValidationError(null);
+                }}
                 className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-2.5 py-1.5 text-sm text-stone-100 font-mono focus:outline-none focus:border-stone-400 disabled:opacity-50 shadow-inner"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-stone-200">Porta Final</label>
+              <label htmlFor="end-port-input" className="text-xs font-semibold text-stone-200">
+                Porta Final
+              </label>
               <input
+                id="end-port-input"
                 type="number"
                 min="1"
                 max="65535"
-                value={endPort}
+                value={endPortInput}
                 disabled={isScanningPorts}
-                onChange={(e) => setEndPort(Math.min(65535, parseInt(e.target.value, 10) || 1024))}
+                onChange={(e) => {
+                  setEndPortInput(e.target.value);
+                  setValidationError(null);
+                }}
                 className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-2.5 py-1.5 text-sm text-stone-100 font-mono focus:outline-none focus:border-stone-400 disabled:opacity-50 shadow-inner"
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-stone-200">Timeout (ms)</label>
+              <label htmlFor="timeout-port-input" className="text-xs font-semibold text-stone-200">
+                Timeout (ms)
+              </label>
               <input
+                id="timeout-port-input"
                 type="number"
                 min="200"
                 max="5000"
                 step="100"
-                value={timeoutMs}
+                value={timeoutInput}
                 disabled={isScanningPorts}
-                onChange={(e) => setTimeoutMs(Math.max(200, Math.min(5000, parseInt(e.target.value, 10) || 1000)))}
+                onChange={(e) => {
+                  setTimeoutInput(e.target.value);
+                  setValidationError(null);
+                }}
                 className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-2.5 py-1.5 text-sm text-stone-100 font-mono focus:outline-none focus:border-stone-400 disabled:opacity-50 shadow-inner"
               />
             </div>
@@ -114,10 +176,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
           <div className="flex items-center gap-1.5">
             <button
               type="button"
-              onClick={() => {
-                setStartPort(1);
-                setEndPort(1024);
-              }}
+              onClick={() => applyPreset(1, 1024)}
               disabled={isScanningPorts}
               className="px-2.5 py-1 rounded-md text-xs font-medium bg-stone-800 border border-stone-700 text-stone-200 hover:text-stone-100 hover:bg-stone-700 transition-colors"
             >
@@ -125,10 +184,7 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => {
-                setStartPort(20);
-                setEndPort(445);
-              }}
+              onClick={() => applyPreset(20, 445)}
               disabled={isScanningPorts}
               className="px-2.5 py-1 rounded-md text-xs font-medium bg-stone-800 border border-stone-700 text-stone-200 hover:text-stone-100 hover:bg-stone-700 transition-colors"
             >
@@ -136,16 +192,21 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
             </button>
             <button
               type="button"
-              onClick={() => {
-                setStartPort(1);
-                setEndPort(8080);
-              }}
+              onClick={() => applyPreset(1, 8080)}
               disabled={isScanningPorts}
               className="px-2.5 py-1 rounded-md text-xs font-medium bg-stone-800 border border-stone-700 text-stone-200 hover:text-stone-100 hover:bg-stone-700 transition-colors"
             >
               Até 8080
             </button>
           </div>
+
+          {/* Validation or Backend Error Banner */}
+          {activeError && (
+            <div className="p-2.5 rounded-lg bg-red-950/35 border border-red-800/60 text-red-200 text-xs flex items-start gap-2">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <span>{activeError}</span>
+            </div>
+          )}
 
           {/* Action button */}
           {!isScanningPorts ? (
@@ -167,12 +228,34 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
           )}
         </div>
 
-        {/* Counter Summary Pills */}
-        <div className="px-4 py-2.5 bg-stone-900/60 border-b border-border-subtle flex items-center justify-between text-xs shrink-0">
-          <span className="text-stone-200 font-semibold">Resultados</span>
+        {/* Counter Summary & View Filter Tabs */}
+        <div className="px-4 py-2.5 bg-stone-900/60 border-b border-border-subtle flex items-center justify-between gap-2 text-xs shrink-0">
+          <div className="flex items-center gap-1 bg-stone-900 p-0.5 rounded-lg border border-stone-700/80">
+            <button
+              type="button"
+              onClick={() => setFilterMode('open')}
+              className={`px-2 py-1 rounded-md font-semibold transition-colors ${
+                filterMode === 'open'
+                  ? 'bg-sage text-stone-950'
+                  : 'text-stone-300 hover:text-stone-100'
+              }`}
+            >
+              Abertas ({openPorts.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setFilterMode('all')}
+              className={`px-2 py-1 rounded-md font-semibold transition-colors ${
+                filterMode === 'all'
+                  ? 'bg-stone-700 text-stone-100'
+                  : 'text-stone-300 hover:text-stone-100'
+              }`}
+            >
+              Todas ({portResults.length})
+            </button>
+          </div>
+
           <div className="flex items-center gap-2 font-mono text-xs">
-            <span className="text-sage font-bold">{openCount} abertas</span>
-            <span className="text-stone-500">•</span>
             <span className="text-amber-400 font-bold">{filteredCount} filtradas</span>
             <span className="text-stone-500">•</span>
             <span className="text-stone-300 font-bold">{closedCount} fechadas</span>
@@ -192,9 +275,34 @@ export const PortDrawer: React.FC<PortDrawerProps> = ({
                 <span className="font-medium text-stone-300">Clique em Escanear Portas para iniciar.</span>
               )}
             </div>
+          ) : displayedPorts.length === 0 ? (
+            <div className="h-48 flex flex-col items-center justify-center text-center px-4 text-stone-300 text-sm gap-2">
+              {isScanningPorts ? (
+                <>
+                  <Activity className="w-5 h-5 animate-spin text-sage mb-1" />
+                  <span className="font-medium text-stone-200">Procurando portas abertas...</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-medium text-stone-200">
+                    Nenhuma porta TCP aberta encontrada neste intervalo.
+                  </span>
+                  <span className="text-xs text-stone-400">
+                    Foram avaliadas {portResults.length} portas ({closedCount} fechadas, {filteredCount} filtradas).
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFilterMode('all')}
+                    className="mt-1 px-3 py-1 rounded-md bg-stone-800 hover:bg-stone-700 border border-stone-600 text-xs font-semibold text-stone-200 transition-colors"
+                  >
+                    Ver todas as {portResults.length} portas
+                  </button>
+                </>
+              )}
+            </div>
           ) : (
             <div className="space-y-1.5">
-              {portResults.map((p) => {
+              {displayedPorts.map((p) => {
                 const isOpen = p.state === 'open';
                 const isFiltered = p.state === 'filtered';
 

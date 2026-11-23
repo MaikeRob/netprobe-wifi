@@ -27,8 +27,9 @@ describe('MetricsGrid', () => {
     render(<MetricsGrid progress={progress} isSweeping={true} />);
     expect(screen.getByText('Estágio 1: Varredura ICMP (Ping Sweep)')).toBeInTheDocument();
     expect(screen.getByText('40%')).toBeInTheDocument();
+    expect(screen.getByText('100/254 verificados')).toBeInTheDocument();
     expect(screen.getByText('254')).toBeInTheDocument();
-    expect(screen.getByText('249')).toBeInTheDocument(); // 254 - 5 = 249 offline
+    expect(screen.getByText('95')).toBeInTheDocument(); // 100 scanned - 5 active = 95 silent so far
   });
 
   it('renders ARP stage and finished state', () => {
@@ -45,5 +46,6 @@ describe('MetricsGrid', () => {
     render(<MetricsGrid progress={progress} isSweeping={false} />);
     expect(screen.getByText('Varredura Concluída')).toBeInTheDocument();
     expect(screen.getByText('100%')).toBeInTheDocument();
+    expect(screen.getByText('6')).toBeInTheDocument(); // 10 total - 4 active = 6 offline
   });
 });

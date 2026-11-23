@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { TitleBar } from './components/TitleBar';
 import { Header } from './components/Header';
 import { Controls } from './components/Controls';
@@ -26,6 +26,12 @@ import {
 } from '../wailsjs/go/main/App';
 import { EventsOn, EventsOff } from '../wailsjs/runtime/runtime';
 
+function formatErrorMessage(err: unknown): string {
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
 export const App: React.FC = () => {
   // Network interfaces and target configuration
   const [adapters, setAdapters] = useState<NetworkAdapter[]>([]);
@@ -44,35 +50,51 @@ export const App: React.FC = () => {
   const [selectedHostForPort, setSelectedHostForPort] = useState<DiscoveredHost | null>(null);
   const [isScanningPorts, setIsScanningPorts] = useState(false);
   const [portResults, setPortResults] = useState<PortResult[]>([]);
+  const [portScanError, setPortScanError] = useState<string | null>(null);
+  const portScanSeqRef = useRef(0);
+
+  const refreshSystem = useCallback(async () => {
+    try {
+      const caps = await CheckCapabilities();
+      setCapabilities(caps);
+
+      const ifaces = (await GetNetworkInterfaces()) || [];
+      setAdapters(ifaces);
+
+      if (ifaces.length === 0) {
+        setSelectedAdapter(null);
+        return;
+      }
+
+      try {
+        const def = await GetDefaultInterface();
+        setSelectedAdapter(def);
+        if (def.cidr) {
+          setCidr(def.cidr);
+        }
+      } catch {
+        setSelectedAdapter(ifaces[0]);
+        if (ifaces[0].cidr) {
+          setCidr(ifaces[0].cidr);
+        }
+      }
+    } catch (err) {
+      setProgress({
+        stage: 'error',
+        totalHosts: 0,
+        scannedHosts: 0,
+        activeHosts: 0,
+        icmpDiscovered: 0,
+        arpDiscovered: 0,
+        percent: 0,
+        errorMessage: `Falha ao consultar interfaces de rede: ${formatErrorMessage(err)}`,
+      });
+    }
+  }, []);
 
   // Load interfaces and capabilities on mount
   useEffect(() => {
-    async function initSystem() {
-      try {
-        const caps = await CheckCapabilities();
-        setCapabilities(caps);
-
-        const ifaces = await GetNetworkInterfaces();
-        setAdapters(ifaces);
-
-        try {
-          const def = await GetDefaultInterface();
-          setSelectedAdapter(def);
-          if (def.cidr) {
-            setCidr(def.cidr);
-          }
-        } catch {
-          if (ifaces.length > 0) {
-            setSelectedAdapter(ifaces[0]);
-            if (ifaces[0].cidr) setCidr(ifaces[0].cidr);
-          }
-        }
-      } catch (err) {
-        console.error('Falha ao inicializar adaptadores de rede:', err);
-      }
-    }
-
-    initSystem();
+    refreshSystem();
 
     // Listen to real-time events from Go backend
     const cancelProgress = EventsOn('sweep:progress', (p: SweepProgressEvent) => {
@@ -96,13 +118,17 @@ export const App: React.FC = () => {
       });
     });
 
-    const cancelSummary = EventsOn('sweep:summary', (s: SweepSummaryEvent) => {
-      console.log('Varredura finalizada:', s);
+    const cancelSummary = EventsOn('sweep:summary', (_s: SweepSummaryEvent) => {
       setIsSweeping(false);
     });
 
     const cancelPortResult = EventsOn('port:result', (r: PortResult) => {
-      setPortResults((prev) => [...prev, r]);
+      setPortResults((prev) => {
+        if (prev.some((item) => item.port === r.port)) {
+          return prev;
+        }
+        return [...prev, r];
+      });
     });
 
     return () => {
@@ -115,7 +141,7 @@ export const App: React.FC = () => {
       EventsOff('sweep:summary');
       EventsOff('port:result');
     };
-  }, []);
+  }, [refreshSystem]);
 
   const handleStartSweep = async () => {
     try {
@@ -124,8 +150,17 @@ export const App: React.FC = () => {
       setIsSweeping(true);
       await StartSweep(cidr, selectedAdapter?.name || '', rateLimit, timeoutMs);
     } catch (err) {
-      console.error('Erro ao iniciar varredura:', err);
       setIsSweeping(false);
+      setProgress({
+        stage: 'error',
+        totalHosts: 0,
+        scannedHosts: 0,
+        activeHosts: 0,
+        icmpDiscovered: 0,
+        arpDiscovered: 0,
+        percent: 0,
+        errorMessage: formatErrorMessage(err),
+      });
     }
   };
 
@@ -134,7 +169,16 @@ export const App: React.FC = () => {
       await CancelSweep();
       setIsSweeping(false);
     } catch (err) {
-      console.error('Erro ao cancelar varredura:', err);
+      setProgress((prev) => ({
+        stage: 'error',
+        totalHosts: prev?.totalHosts || 0,
+        scannedHosts: prev?.scannedHosts || 0,
+        activeHosts: prev?.activeHosts || 0,
+        icmpDiscovered: prev?.icmpDiscovered || 0,
+        arpDiscovered: prev?.arpDiscovered || 0,
+        percent: prev?.percent || 0,
+        errorMessage: `Erro ao cancelar varredura: ${formatErrorMessage(err)}`,
+      }));
     }
   };
 
@@ -146,26 +190,49 @@ export const App: React.FC = () => {
   };
 
   const handleStartPortScan = async (targetIP: string, startPort: number, endPort: number, timeout: number) => {
+    const seq = ++portScanSeqRef.current;
     try {
       setPortResults([]);
+      setPortScanError(null);
       setIsScanningPorts(true);
       const results = await ScanPorts(targetIP, startPort, endPort, timeout);
-      setPortResults(results);
+      if (seq === portScanSeqRef.current && results) {
+        setPortResults(results);
+      }
     } catch (err) {
-      console.error('Erro ao escanear portas:', err);
+      if (seq === portScanSeqRef.current) {
+        const msg = formatErrorMessage(err);
+        if (!msg.includes('context canceled')) {
+          setPortScanError(msg);
+        }
+      }
+    } finally {
+      if (seq === portScanSeqRef.current) {
+        setIsScanningPorts(false);
+      }
+    }
+  };
+
+  const handleCancelPortScan = async () => {
+    portScanSeqRef.current++;
+    try {
+      await CancelPortScan();
+    } catch (err) {
+      setPortScanError(`Erro ao cancelar escaneamento: ${formatErrorMessage(err)}`);
     } finally {
       setIsScanningPorts(false);
     }
   };
 
-  const handleCancelPortScan = async () => {
-    try {
-      await CancelPortScan();
-    } catch (err) {
-      console.error('Erro ao cancelar scan de portas:', err);
-    } finally {
+  const handleSelectHostForPort = (host: DiscoveredHost | null) => {
+    if (isScanningPorts) {
+      portScanSeqRef.current++;
+      void CancelPortScan();
       setIsScanningPorts(false);
     }
+    setSelectedHostForPort(host);
+    setPortResults([]);
+    setPortScanError(null);
   };
 
   return (
@@ -176,13 +243,18 @@ export const App: React.FC = () => {
       {/* Main Workspace Body */}
       <main className="flex-1 flex flex-col p-4 gap-3.5 min-h-0 overflow-hidden">
         {/* Header with Title and Capabilities */}
-        <Header capabilities={capabilities} isSweeping={isSweeping} />
+        <Header
+          capabilities={capabilities}
+          isSweeping={isSweeping}
+          onRefreshCapabilities={refreshSystem}
+        />
 
         {/* Controls Panel */}
         <Controls
           adapters={adapters}
           selectedAdapter={selectedAdapter}
           onSelectAdapter={handleSelectAdapter}
+          onRefreshAdapters={refreshSystem}
           cidr={cidr}
           onChangeCIDR={setCidr}
           rateLimit={rateLimit}
@@ -200,22 +272,20 @@ export const App: React.FC = () => {
         {/* Live Discovered Hosts Table */}
         <HostTable
           hosts={hosts}
-          onSelectHostForPortScan={(host) => {
-            setSelectedHostForPort(host);
-            setPortResults([]);
-          }}
+          onSelectHostForPortScan={(host) => handleSelectHostForPort(host)}
         />
       </main>
 
       {/* Option A: Slide-over Drawer for Port Scanning */}
       <PortDrawer
         isOpen={selectedHostForPort !== null}
-        onClose={() => setSelectedHostForPort(null)}
+        onClose={() => handleSelectHostForPort(null)}
         host={selectedHostForPort}
         onStartPortScan={handleStartPortScan}
         onCancelPortScan={handleCancelPortScan}
         isScanningPorts={isScanningPorts}
         portResults={portResults}
+        errorMessage={portScanError}
       />
     </div>
   );

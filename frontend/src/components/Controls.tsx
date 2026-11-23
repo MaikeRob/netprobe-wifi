@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Play, Square, Sliders, AlertTriangle } from 'lucide-react';
+import { Play, Square, Sliders, AlertTriangle, RefreshCw, WifiOff } from 'lucide-react';
 import { NetworkAdapter } from '../types/scanner';
 
 interface ControlsProps {
   adapters: NetworkAdapter[];
   selectedAdapter: NetworkAdapter | null;
   onSelectAdapter: (adapter: NetworkAdapter) => void;
+  onRefreshAdapters?: () => void;
   cidr: string;
   onChangeCIDR: (cidr: string) => void;
   rateLimit: number;
@@ -21,6 +22,7 @@ export const Controls: React.FC<ControlsProps> = ({
   adapters,
   selectedAdapter,
   onSelectAdapter,
+  onRefreshAdapters,
   cidr,
   onChangeCIDR,
   rateLimit,
@@ -43,34 +45,69 @@ export const Controls: React.FC<ControlsProps> = ({
     return false;
   })();
 
+  const hasActiveNetwork = adapters.length > 0;
+
   return (
     <div className="bg-surface rounded-xl border border-border-subtle p-4 space-y-3.5">
       {/* Primary Input Row */}
       <div className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end">
         {/* Network Interface Selector */}
         <div className="sm:col-span-5 space-y-1.5">
-          <label className="text-xs font-semibold text-stone-200">Interface de Rede</label>
+          <div className="flex items-center justify-between gap-2">
+            <label htmlFor="adapter-select" className="text-xs font-semibold text-stone-200">
+              Interface de Rede
+            </label>
+            <div className="flex items-center gap-2">
+              {selectedAdapter?.mac && (
+                <span className="text-[11px] font-mono text-stone-400" title="Endereço MAC da interface local">
+                  MAC: {selectedAdapter.mac}
+                </span>
+              )}
+              {onRefreshAdapters && (
+                <button
+                  type="button"
+                  onClick={onRefreshAdapters}
+                  disabled={isSweeping}
+                  title="Recarregar interfaces de rede e verificar conexão Wi-Fi"
+                  className="inline-flex items-center gap-1 text-xs text-stone-300 hover:text-stone-100 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>Atualizar</span>
+                </button>
+              )}
+            </div>
+          </div>
           <select
+            id="adapter-select"
             value={selectedAdapter?.name || ''}
             onChange={(e) => {
               const found = adapters.find((a) => a.name === e.target.value);
               if (found) onSelectAdapter(found);
             }}
-            disabled={isSweeping}
+            disabled={isSweeping || !hasActiveNetwork}
             className="w-full bg-stone-900 border border-stone-700/80 rounded-lg px-3 py-2 text-sm text-stone-100 font-medium focus:outline-none focus:border-stone-400 disabled:opacity-50 transition-colors shadow-inner"
           >
-            {adapters.map((a) => (
-              <option key={a.name} value={a.name} className="bg-[#18181c] text-stone-100 font-sans py-2">
-                {a.name} {a.ip ? `(${a.ip})` : ''} {a.cidr ? `[${a.cidr}]` : ''}
+            {!hasActiveNetwork ? (
+              <option value="" className="bg-[#18181c] text-stone-400">
+                Nenhuma interface de rede ativa
               </option>
-            ))}
+            ) : (
+              adapters.map((a) => (
+                <option key={a.name} value={a.name} className="bg-[#18181c] text-stone-100 font-sans py-2">
+                  {a.name} {a.ip ? `(${a.ip})` : ''} {a.cidr ? `[${a.cidr}]` : ''}
+                </option>
+              ))
+            )}
           </select>
         </div>
 
         {/* CIDR Input Field */}
         <div className="sm:col-span-4 space-y-1.5">
-          <label className="text-xs font-semibold text-stone-200">Faixa de Rede (CIDR)</label>
+          <label htmlFor="cidr-input" className="text-xs font-semibold text-stone-200">
+            Faixa de Rede (CIDR)
+          </label>
           <input
+            id="cidr-input"
             type="text"
             value={cidr}
             onChange={(e) => onChangeCIDR(e.target.value)}
@@ -85,7 +122,9 @@ export const Controls: React.FC<ControlsProps> = ({
           {!isSweeping ? (
             <button
               onClick={onStartSweep}
-              className="flex-1 bg-sage hover:bg-sage-hover text-stone-950 font-semibold text-xs sm:text-sm px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]"
+              disabled={!hasActiveNetwork || !cidr.trim()}
+              title={!hasActiveNetwork ? 'Conecte-se a uma rede Wi-Fi ativa para iniciar' : 'Iniciar varredura da rede'}
+              className="flex-1 bg-sage hover:bg-sage-hover disabled:opacity-40 disabled:pointer-events-none text-stone-950 font-semibold text-xs sm:text-sm px-4 py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-[0.98]"
             >
               <Play className="w-4 h-4 fill-current" />
               <span>Iniciar</span>
@@ -113,6 +152,28 @@ export const Controls: React.FC<ControlsProps> = ({
           </button>
         </div>
       </div>
+
+      {/* No Active Network Warning Banner */}
+      {!hasActiveNetwork && (
+        <div className="flex items-center justify-between gap-3 px-3.5 py-2.5 rounded-lg bg-red-950/35 border border-red-800/60 text-red-200 text-xs sm:text-sm">
+          <div className="flex items-center gap-2">
+            <WifiOff className="w-4 h-4 shrink-0 text-red-400" />
+            <span>
+              <strong className="text-red-100">Sem conexão de rede ativa:</strong> Nenhuma interface IPv4/Wi-Fi conectada foi encontrada no notebook. Conecte-se ao Wi-Fi e clique em <strong>Atualizar</strong>.
+            </span>
+          </div>
+          {onRefreshAdapters && (
+            <button
+              type="button"
+              onClick={onRefreshAdapters}
+              className="px-2.5 py-1 rounded-md bg-red-900/40 hover:bg-red-900/60 border border-red-700/60 text-red-100 text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors"
+            >
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>Atualizar</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Large Range Warning Banner */}
       {isLargeRange && (
