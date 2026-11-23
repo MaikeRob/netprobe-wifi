@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"runtime"
 	"unsafe"
 
 	"golang.org/x/sys/windows"
@@ -37,6 +38,7 @@ func (w *WindowsTableReader) ReadTable() (map[netip.Addr]TableEntry, error) {
 	var size uint32 = 0
 	// 1. Query required buffer size
 	ret, _, _ := procGetIpNetTable.Call(0, uintptr(unsafe.Pointer(&size)), 0)
+	runtime.KeepAlive(&size)
 	if ret != uintptr(windows.ERROR_INSUFFICIENT_BUFFER) && ret != 0 {
 		return nil, fmt.Errorf("GetIpNetTable initial size query returned %d", ret)
 	}
@@ -47,6 +49,8 @@ func (w *WindowsTableReader) ReadTable() (map[netip.Addr]TableEntry, error) {
 
 	buf := make([]byte, size)
 	ret, _, err := procGetIpNetTable.Call(uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)), 0)
+	runtime.KeepAlive(buf)
+	runtime.KeepAlive(&size)
 	if ret != 0 {
 		return nil, fmt.Errorf("GetIpNetTable failed with code %d: %w", ret, err)
 	}

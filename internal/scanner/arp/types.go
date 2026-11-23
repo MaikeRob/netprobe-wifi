@@ -23,6 +23,8 @@ const (
 	DefaultPollInterval = 100 * time.Millisecond
 	// DefaultTriggerPort is an unlikely high UDP port used on Linux to trigger kernel neighbor resolution.
 	DefaultTriggerPort = 38472
+	// DefaultRateLimitPPS is the default pacing rate for kernel ARP trigger emissions.
+	DefaultRateLimitPPS = 150
 )
 
 var (
@@ -45,11 +47,12 @@ type HostInfo struct {
 
 // TableEntry represents a parsed entry from the operating system's neighbor/ARP cache.
 type TableEntry struct {
-	IP      netip.Addr
-	MAC     net.HardwareAddr
-	Flags   uint32
-	Device  string
-	IsValid bool
+	IP              netip.Addr
+	MAC             net.HardwareAddr
+	Flags           uint32
+	Device          string
+	IsValid         bool
+	ConfirmedActive bool
 }
 
 // TableReader abstracts querying the operating system neighbor/ARP cache.
@@ -60,6 +63,12 @@ type TableReader interface {
 // Trigger abstracts provoking the operating system to send an ARP request for target.
 type Trigger interface {
 	Provoke(ctx context.Context, target netip.Addr, iface netinfo.Interface) error
+}
+
+// DirectResolver is an optional interface implemented by triggers (such as Windows SendARP)
+// that synchronously resolve and confirm a target's MAC address during Provoke.
+type DirectResolver interface {
+	ResolvedMAC(ip netip.Addr) (net.HardwareAddr, bool)
 }
 
 func isAllZeros(hw net.HardwareAddr) bool {

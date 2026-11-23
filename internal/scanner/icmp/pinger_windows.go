@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"net/netip"
+	"runtime"
 	"sync"
 	"time"
 	"unsafe"
@@ -97,6 +98,8 @@ func (p *WindowsPinger) Ping(ctx context.Context, target netip.Addr, timeout tim
 		uintptr(replySize),
 		uintptr(timeoutMs),
 	)
+	runtime.KeepAlive(sendData)
+	runtime.KeepAlive(replyBuf)
 
 	// If context was cancelled during the blocking call, abort
 	if ctx.Err() != nil {

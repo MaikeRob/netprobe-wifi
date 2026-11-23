@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/netip"
 	"sync"
 	"time"
@@ -28,8 +28,12 @@ type App struct {
 	activePortCancel  context.CancelFunc
 	isSweeping        bool
 	isScanningPorts   bool
+	lastActiveSubnet  netip.Prefix
+	discoveredIPs     map[netip.Addr]struct{}
 
 	ouiDB            *oui.DB
+	listInterfaces   func() ([]netinfo.Interface, error)
+	routeSource      netinfo.RouteSource
 	pingerFactory    func() (icmp.Pinger, error)
 	arpEngineFactory func(iface netinfo.Interface) (*arp.Engine, error)
 	portEngine       *port.Engine
@@ -39,9 +43,24 @@ type App struct {
 func NewApp() *App {
 	db, _ := oui.Load()
 	return &App{
-		ouiDB:      db,
-		portEngine: port.NewEngine(nil),
+		ouiDB:         db,
+		discoveredIPs: make(map[netip.Addr]struct{}),
+		portEngine:    port.NewEngine(nil),
 	}
+}
+
+func (a *App) getInterfaces() ([]netinfo.Interface, error) {
+	if a.listInterfaces != nil {
+		return a.listInterfaces()
+	}
+	return netinfo.ListInterfaces()
+}
+
+func (a *App) getRouteSource() netinfo.RouteSource {
+	if a.routeSource != nil {
+		return a.routeSource
+	}
+	return netinfo.NewUDPRouteSource()
 }
 
 // startup is called when the app starts. The context is saved
@@ -65,21 +84,30 @@ func toNetworkAdapter(iface netinfo.Interface) NetworkAdapter {
 		ipStr = iface.Addr.String()
 	}
 	cidrStr := ""
-	if iface.Prefix.IsValid() {
+	suggested := netinfo.SuggestPrefix(iface)
+	if suggested.IsValid() {
+		cidrStr = suggested.String()
+	} else if iface.Prefix.IsValid() {
 		cidrStr = iface.Prefix.String()
+	}
+	macStr := ""
+	if len(iface.MAC) == 6 {
+		macStr = oui.FormatMAC(iface.MAC)
+	} else if len(iface.MAC) > 0 {
+		macStr = iface.MAC.String()
 	}
 	return NetworkAdapter{
 		Name:  iface.Name,
 		IP:    ipStr,
 		CIDR:  cidrStr,
-		MAC:   iface.MAC.String(),
+		MAC:   macStr,
 		Index: iface.Index,
 	}
 }
 
 // GetNetworkInterfaces returns the list of active IPv4 network interfaces.
 func (a *App) GetNetworkInterfaces() ([]NetworkAdapter, error) {
-	ifaces, err := netinfo.ListInterfaces()
+	ifaces, err := a.getInterfaces()
 	if err != nil {
 		return nil, err
 	}
@@ -92,11 +120,11 @@ func (a *App) GetNetworkInterfaces() ([]NetworkAdapter, error) {
 
 // GetDefaultInterface resolves the primary network interface via zero-packet routing query.
 func (a *App) GetDefaultInterface() (NetworkAdapter, error) {
-	ifaces, err := netinfo.ListInterfaces()
+	ifaces, err := a.getInterfaces()
 	if err != nil {
 		return NetworkAdapter{}, err
 	}
-	defIface, err := netinfo.DefaultInterface(ifaces, netinfo.NewUDPRouteSource())
+	defIface, err := netinfo.DefaultInterface(ifaces, a.getRouteSource())
 	if err != nil {
 		return NetworkAdapter{}, err
 	}
@@ -116,15 +144,20 @@ func (a *App) StartSweep(cidr string, ifaceName string, rateLimit int, timeoutMs
 		return errors.New("varredura já está em andamento")
 	}
 
+	ifaces, listErr := a.getInterfaces()
+	if listErr != nil {
+		a.mu.Unlock()
+		return fmt.Errorf("erro ao listar interfaces de rede: %w", listErr)
+	}
+	if len(ifaces) == 0 {
+		a.mu.Unlock()
+		return errors.New("nenhuma interface de rede Wi-Fi/IPv4 ativa encontrada — verifique se o notebook está conectado à rede")
+	}
+
 	// 1. Resolve interface
 	var iface netinfo.Interface
 	var err error
 	if ifaceName != "" {
-		ifaces, listErr := netinfo.ListInterfaces()
-		if listErr != nil {
-			a.mu.Unlock()
-			return fmt.Errorf("listando interfaces: %w", listErr)
-		}
 		found := false
 		for _, item := range ifaces {
 			if item.Name == ifaceName {
@@ -135,18 +168,13 @@ func (a *App) StartSweep(cidr string, ifaceName string, rateLimit int, timeoutMs
 		}
 		if !found {
 			a.mu.Unlock()
-			return fmt.Errorf("interface %q não encontrada", ifaceName)
+			return fmt.Errorf("interface de rede %q não está mais ativa — clique em Atualizar Interfaces", ifaceName)
 		}
 	} else {
-		ifaces, listErr := netinfo.ListInterfaces()
-		if listErr != nil {
-			a.mu.Unlock()
-			return fmt.Errorf("listando interfaces: %w", listErr)
-		}
-		iface, err = netinfo.DefaultInterface(ifaces, netinfo.NewUDPRouteSource())
+		iface, err = netinfo.DefaultInterface(ifaces, a.getRouteSource())
 		if err != nil {
 			a.mu.Unlock()
-			return fmt.Errorf("detectando interface padrão: %w", err)
+			return fmt.Errorf("não foi possível detectar uma interface de rede ativa: %w", err)
 		}
 	}
 
@@ -158,9 +186,15 @@ func (a *App) StartSweep(cidr string, ifaceName string, rateLimit int, timeoutMs
 	ctx, cancel := context.WithCancel(baseCtx)
 	a.activeSweepCancel = cancel
 	a.isSweeping = true
+	a.lastActiveSubnet = iface.Prefix
+	a.discoveredIPs = make(map[netip.Addr]struct{})
 	a.mu.Unlock()
 
-	log.Printf("[netprobe] Iniciar varredura: CIDR=%s, Interface=%s (%s), Taxa=%d pps, Timeout=%d ms", cidr, iface.Name, iface.Addr, rateLimit, timeoutMs)
+	slog.Info("starting network sweep",
+		"interface", iface.Name,
+		"rate_limit_pps", rateLimit,
+		"timeout_ms", timeoutMs,
+	)
 
 	// Launch background sweep
 	go a.runSweep(ctx, cidr, iface, rateLimit, timeoutMs)
@@ -184,13 +218,13 @@ func (a *App) runSweep(ctx context.Context, cidr string, iface netinfo.Interface
 		pinger, err = icmp.NewPinger()
 	}
 	if err != nil {
-		log.Printf("[netprobe] ICMP socket indisponível (%v): executando modo resiliente com ARP provocado pelo kernel", err)
+		slog.Warn("icmp socket unavailable; falling back to kernel-provoked ARP discovery", "reason", err)
 		pinger = nil
 	} else {
-		log.Printf("[netprobe] ICMP socket inicializado com sucesso (modo ativo)")
+		slog.Info("icmp socket initialized")
 	}
 	if pinger != nil {
-		defer pinger.Close()
+		defer func() { _ = pinger.Close() }()
 	}
 
 	var arpEngine *arp.Engine
@@ -204,24 +238,46 @@ func (a *App) runSweep(ctx context.Context, cidr string, iface netinfo.Interface
 
 	handlers := scanner.SweepHandlers{
 		OnProgress: func(p scanner.SweepProgressEvent) {
-			log.Printf("[netprobe] Progresso [%s]: %.0f%% (%d/%d escaneados, %d ativos [ICMP: %d, ARP: %d])",
-				p.Stage, p.Percent, p.ScannedHosts, p.TotalHosts, p.ActiveHosts, p.ICMPDiscovered, p.ARPDiscovered)
+			slog.Debug("sweep progress",
+				"stage", string(p.Stage),
+				"percent", p.Percent,
+				"scanned", p.ScannedHosts,
+				"total", p.TotalHosts,
+				"active", p.ActiveHosts,
+				"icmp", p.ICMPDiscovered,
+				"arp", p.ARPDiscovered,
+			)
 			if a.ctx != nil {
 				runtime.EventsEmit(a.ctx, "sweep:progress", p)
 			}
 		},
 		OnBatch: func(b scanner.HostBatchEvent) {
+			a.mu.Lock()
 			for _, h := range b.Hosts {
-				log.Printf("[netprobe] -> Host ativo: IP=%-15s MAC=%-17s Fabricante=%-24s RTT=%-8v Origem=%s",
-					h.IP, h.MAC, h.Vendor, h.RTT, h.DiscoveredBy)
+				if ip, parseErr := netip.ParseAddr(h.IP); parseErr == nil {
+					a.discoveredIPs[ip] = struct{}{}
+				}
+				slog.Debug("discovered active host",
+					"ip", h.IP,
+					"mac", h.MAC,
+					"vendor", h.Vendor,
+					"rtt", h.RTT,
+					"method", h.DiscoveredBy,
+				)
 			}
+			a.mu.Unlock()
 			if a.ctx != nil {
 				runtime.EventsEmit(a.ctx, "sweep:batch", b)
 			}
 		},
 		OnSummary: func(s scanner.SweepSummaryEvent) {
-			log.Printf("[netprobe] Varredura CONCLUÍDA em %v: %d hosts ativos encontrados (ICMP: %d, ARP: %d)",
-				s.Duration, s.ActiveHosts, s.ICMPDiscovered, s.ARPDiscovered)
+			slog.Info("sweep completed",
+				"duration", s.Duration,
+				"total_hosts", s.TotalHosts,
+				"active_hosts", s.ActiveHosts,
+				"icmp_discovered", s.ICMPDiscovered,
+				"arp_discovered", s.ARPDiscovered,
+			)
 			if a.ctx != nil {
 				runtime.EventsEmit(a.ctx, "sweep:summary", s)
 			}
@@ -243,7 +299,7 @@ func (a *App) runSweep(ctx context.Context, cidr string, iface netinfo.Interface
 
 	runErr := orch.Run(ctx, cfg, handlers)
 	if runErr != nil && ctx.Err() == nil {
-		log.Printf("[netprobe] ERRO na varredura: %v", runErr)
+		slog.Error("sweep failed", "error", runErr)
 		if a.ctx != nil {
 			runtime.EventsEmit(a.ctx, "sweep:progress", scanner.SweepProgressEvent{
 				Stage:        scanner.StageError,
@@ -266,6 +322,35 @@ func (a *App) CancelSweep() error {
 	return nil
 }
 
+// isAllowedPortScanTarget verifies that target belongs to an active local subnet or was discovered in the current sweep.
+func (a *App) isAllowedPortScanTarget(target netip.Addr) (netip.Prefix, bool) {
+	a.mu.Lock()
+	_, wasDiscovered := a.discoveredIPs[target]
+	lastSubnet := a.lastActiveSubnet
+	a.mu.Unlock()
+
+	if wasDiscovered {
+		if lastSubnet.IsValid() && lastSubnet.Contains(target) {
+			return lastSubnet, true
+		}
+		return netip.PrefixFrom(target, 32), true
+	}
+
+	if lastSubnet.IsValid() && lastSubnet.Contains(target) {
+		return lastSubnet, true
+	}
+
+	if ifaces, err := a.getInterfaces(); err == nil {
+		for _, iface := range ifaces {
+			if iface.Prefix.IsValid() && iface.Prefix.Contains(target) {
+				return iface.Prefix, true
+			}
+		}
+	}
+
+	return netip.Prefix{}, false
+}
+
 // ScanPorts runs a TCP connect scan against the target IP.
 func (a *App) ScanPorts(targetIP string, startPort, endPort uint16, timeoutMs int) ([]port.PortResult, error) {
 	a.mu.Lock()
@@ -279,6 +364,7 @@ func (a *App) ScanPorts(targetIP string, startPort, endPort uint16, timeoutMs in
 		a.mu.Unlock()
 		return nil, fmt.Errorf("endereço IP inválido %q: %w", targetIP, err)
 	}
+	target = target.Unmap()
 
 	baseCtx := a.ctx
 	if baseCtx == nil {
@@ -297,15 +383,26 @@ func (a *App) ScanPorts(targetIP string, startPort, endPort uint16, timeoutMs in
 		a.mu.Unlock()
 	}()
 
+	allowedSubnet, allowed := a.isAllowedPortScanTarget(target)
+	if !allowed {
+		return nil, fmt.Errorf("%w: o IP %s não pertence à sub-rede ativa nem foi descoberto na varredura", port.ErrTargetOutsideSubnet, target)
+	}
+
 	timeout := time.Duration(timeoutMs) * time.Millisecond
 	if timeout <= 0 {
 		timeout = port.DefaultTimeout
 	}
 
-	log.Printf("[netprobe] Iniciar scan de portas TCP para %s: portas %d–%d (timeout %d ms)", target, startPort, endPort, timeoutMs)
+	totalPorts := int(endPort) - int(startPort) + 1
+	slog.Info("starting tcp port scan",
+		"start_port", startPort,
+		"end_port", endPort,
+		"timeout_ms", timeoutMs,
+	)
 
 	cfg := port.ScanConfig{
 		Target:      target,
+		Subnet:      allowedSubnet,
 		StartPort:   startPort,
 		EndPort:     endPort,
 		Timeout:     timeout,
@@ -317,13 +414,20 @@ func (a *App) ScanPorts(targetIP string, startPort, endPort uint16, timeoutMs in
 		engine = port.NewEngine(nil)
 	}
 
+	// Stream open ports immediately; for small ranges (<= 256 ports), also stream closed/filtered ports live.
+	// Full sorted results are always returned upon completion.
+	streamAll := totalPorts > 0 && totalPorts <= 256
+
 	results, err := engine.Scan(ctx, cfg, func(res port.PortResult) {
-		if a.ctx != nil {
+		if a.ctx != nil && (res.State == port.StateOpen || streamAll) {
 			runtime.EventsEmit(a.ctx, "port:result", res)
 		}
 	})
 
-	log.Printf("[netprobe] Scan de portas TCP para %s finalizado: %d portas avaliadas (erro: %v)", target, len(results), err)
+	slog.Info("tcp port scan completed",
+		"evaluated_ports", len(results),
+		"error", err,
+	)
 
 	return results, err
 }

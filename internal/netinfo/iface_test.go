@@ -129,10 +129,22 @@ func TestDefaultInterface(t *testing.T) {
 		}
 	})
 
-	t.Run("route error", func(t *testing.T) {
+	t.Run("route error falls back to active private interface", func(t *testing.T) {
+		t.Parallel()
+		rs := &mockRouteSource{err: errors.New("network is unreachable")}
+		iface, err := DefaultInterface(candidates, rs)
+		if err != nil {
+			t.Fatalf("expected fallback to active private interface, got error: %v", err)
+		}
+		if iface.Name != "wlan0" {
+			t.Errorf("expected fallback interface wlan0, got %s", iface.Name)
+		}
+	})
+
+	t.Run("route error with no candidates returns ErrNoDefaultInterface", func(t *testing.T) {
 		t.Parallel()
 		rs := &mockRouteSource{err: errors.New("network down")}
-		_, err := DefaultInterface(candidates, rs)
+		_, err := DefaultInterface(nil, rs)
 		if !errors.Is(err, ErrNoDefaultInterface) {
 			t.Fatalf("expected ErrNoDefaultInterface, got: %v", err)
 		}

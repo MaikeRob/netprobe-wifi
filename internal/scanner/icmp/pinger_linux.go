@@ -19,7 +19,11 @@ import (
 
 type echoReply struct {
 	rtt time.Duration
-	err error
+}
+
+type pendingPing struct {
+	target netip.Addr
+	ch     chan echoReply
 }
 
 // LinuxPinger implements Pinger on Linux using a shared multiplexed ICMP socket.
@@ -28,7 +32,7 @@ type LinuxPinger struct {
 	isDgram    bool
 	id         int
 	seqCounter uint32
-	pending    sync.Map // key: uint16 (seq), value: chan echoReply
+	pending    sync.Map // key: uint16 (seq), value: pendingPing
 	closed     atomic.Bool
 	done       chan struct{}
 }
@@ -75,7 +79,7 @@ func (p *LinuxPinger) readLoop() {
 			return
 		}
 
-		n, _, err := p.conn.ReadFrom(buf)
+		n, peerAddr, err := p.conn.ReadFrom(buf)
 		recvTime := time.Now()
 		if err != nil {
 			if p.closed.Load() {
@@ -109,9 +113,20 @@ func (p *LinuxPinger) readLoop() {
 			continue
 		}
 
+		// On raw sockets, the kernel delivers all incoming ICMP packets across the system.
+		// Filter strictly by our process ICMP identifier to avoid cross-talk from other ping processes.
+		if !p.isDgram && echo.ID != p.id {
+			continue
+		}
+
 		seq := uint16(echo.Seq)
 		if val, exists := p.pending.Load(seq); exists {
-			ch := val.(chan echoReply)
+			req := val.(pendingPing)
+
+			// Verify source IP matches expected target when peerAddr is available
+			if peerIP, ok := extractNetipAddr(peerAddr); ok && peerIP != req.target {
+				continue
+			}
 
 			// Calculate RTT from payload timestamp if present (8 bytes unix nano)
 			var rtt time.Duration
@@ -124,11 +139,25 @@ func (p *LinuxPinger) readLoop() {
 			}
 
 			select {
-			case ch <- echoReply{rtt: rtt}:
+			case req.ch <- echoReply{rtt: rtt}:
 			default:
 			}
 		}
 	}
+}
+
+func extractNetipAddr(addr net.Addr) (netip.Addr, bool) {
+	switch a := addr.(type) {
+	case *net.IPAddr:
+		if ip, ok := netip.AddrFromSlice(a.IP.To4()); ok {
+			return ip, true
+		}
+	case *net.UDPAddr:
+		if ip, ok := netip.AddrFromSlice(a.IP.To4()); ok {
+			return ip, true
+		}
+	}
+	return netip.Addr{}, false
 }
 
 // Ping sends an ICMP Echo Request to the target and awaits the reply or timeout.
@@ -139,7 +168,7 @@ func (p *LinuxPinger) Ping(ctx context.Context, target netip.Addr, timeout time.
 
 	seq := uint16(atomic.AddUint32(&p.seqCounter, 1) & 0xffff)
 	ch := make(chan echoReply, 1)
-	p.pending.Store(seq, ch)
+	p.pending.Store(seq, pendingPing{target: target.Unmap(), ch: ch})
 	defer p.pending.Delete(seq)
 
 	// Embed timestamp in payload for high-resolution RTT measurement

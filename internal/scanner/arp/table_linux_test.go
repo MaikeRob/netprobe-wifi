@@ -3,9 +3,12 @@
 package arp
 
 import (
+	"encoding/binary"
+	"net"
 	"net/netip"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -97,5 +100,69 @@ short_line
 		if entry.IsValid {
 			t.Errorf("entry with bad MAC should not be marked valid")
 		}
+	}
+}
+
+func buildTestNetlinkNeighMsg(state uint16, ip [4]byte, mac net.HardwareAddr) []byte {
+	// rtattr 1: NDA_DST (len=8, type=1, 4-byte IPv4)
+	// rtattr 2: NDA_LLADDR (len=10, type=2, 6-byte MAC, padded to 12 bytes)
+	const nlmsgHdrLen = 16
+	const ndmsgLen = 12
+	const dstAttrLen = 8
+	const llAttrLen = 10
+	const llAttrAligned = 12
+	totalLen := nlmsgHdrLen + ndmsgLen + dstAttrLen + llAttrAligned
+
+	buf := make([]byte, totalLen)
+	// nlmsghdr
+	binary.NativeEndian.PutUint32(buf[0:4], uint32(totalLen))
+	binary.NativeEndian.PutUint16(buf[4:6], syscall.RTM_NEWNEIGH)
+	binary.NativeEndian.PutUint16(buf[6:8], 0)
+	// ndmsg
+	buf[nlmsgHdrLen] = syscall.AF_INET
+	binary.NativeEndian.PutUint16(buf[nlmsgHdrLen+8:nlmsgHdrLen+10], state)
+
+	// NDA_DST
+	off := nlmsgHdrLen + ndmsgLen
+	binary.NativeEndian.PutUint16(buf[off:off+2], uint16(dstAttrLen))
+	binary.NativeEndian.PutUint16(buf[off+2:off+4], ndaDst)
+	copy(buf[off+4:off+8], ip[:])
+
+	// NDA_LLADDR
+	off += dstAttrLen
+	binary.NativeEndian.PutUint16(buf[off:off+2], uint16(llAttrLen))
+	binary.NativeEndian.PutUint16(buf[off+2:off+4], ndaLLAddr)
+	copy(buf[off+4:off+10], mac)
+
+	return buf
+}
+
+func TestApplyNetlinkNUDMessages(t *testing.T) {
+	ipReachable := netip.MustParseAddr("192.168.1.10")
+	ipDelay := netip.MustParseAddr("192.168.1.20")
+	ipProbe := netip.MustParseAddr("192.168.1.30")
+	ipStale := netip.MustParseAddr("192.168.1.40")
+	mac := net.HardwareAddr{0x00, 0x50, 0x56, 0x11, 0x22, 0x33}
+
+	var rib []byte
+	rib = append(rib, buildTestNetlinkNeighMsg(nudReachable, ipReachable.As4(), mac)...)
+	rib = append(rib, buildTestNetlinkNeighMsg(nudDelay, ipDelay.As4(), mac)...)
+	rib = append(rib, buildTestNetlinkNeighMsg(nudProbe, ipProbe.As4(), mac)...)
+	rib = append(rib, buildTestNetlinkNeighMsg(nudStale, ipStale.As4(), mac)...)
+
+	entries := make(map[netip.Addr]TableEntry)
+	applyNetlinkNUDMessages(entries, rib)
+
+	if !entries[ipReachable].ConfirmedActive || !entries[ipReachable].IsValid {
+		t.Errorf("expected NUD_REACHABLE entry to be IsValid=true and ConfirmedActive=true, got %+v", entries[ipReachable])
+	}
+	if entries[ipDelay].ConfirmedActive || !entries[ipDelay].IsValid {
+		t.Errorf("expected NUD_DELAY entry to have ConfirmedActive=false, got %+v", entries[ipDelay])
+	}
+	if entries[ipProbe].ConfirmedActive || !entries[ipProbe].IsValid {
+		t.Errorf("expected NUD_PROBE entry to have ConfirmedActive=false, got %+v", entries[ipProbe])
+	}
+	if entries[ipStale].ConfirmedActive || !entries[ipStale].IsValid {
+		t.Errorf("expected NUD_STALE entry to have ConfirmedActive=false, got %+v", entries[ipStale])
 	}
 }

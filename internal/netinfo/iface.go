@@ -106,13 +106,21 @@ func filterInterfaces(raws []rawInterface) []Interface {
 }
 
 // DefaultInterface selects the default scanning interface from candidates using RouteSource.
+// If the system has no default internet route (e.g., an isolated classroom Wi-Fi router without WAN),
+// it falls back deterministically to the first active private IPv4 candidate interface.
 func DefaultInterface(ifs []Interface, rs RouteSource) (Interface, error) {
 	if rs == nil {
 		return Interface{}, errors.New("route source cannot be nil")
 	}
+	if len(ifs) == 0 {
+		return Interface{}, fmt.Errorf("%w: no active IPv4 network interfaces available", ErrNoDefaultInterface)
+	}
 
 	srcAddr, err := rs.DefaultSourceAddr()
 	if err != nil {
+		if fallback, ok := pickFallbackInterface(ifs); ok {
+			return fallback, nil
+		}
 		return Interface{}, fmt.Errorf("%w: %v", ErrNoDefaultInterface, err)
 	}
 
@@ -131,4 +139,16 @@ func DefaultInterface(ifs []Interface, rs RouteSource) (Interface, error) {
 	}
 
 	return Interface{}, fmt.Errorf("%w: outbound IP %s does not match any candidate", ErrNoDefaultInterface, srcAddr)
+}
+
+func pickFallbackInterface(ifs []Interface) (Interface, bool) {
+	if len(ifs) == 0 {
+		return Interface{}, false
+	}
+	for _, ifi := range ifs {
+		if ifi.Addr.IsValid() && ifi.Addr.IsPrivate() {
+			return ifi, true
+		}
+	}
+	return ifs[0], true
 }

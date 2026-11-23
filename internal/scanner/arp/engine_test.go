@@ -168,6 +168,77 @@ func TestEngine_ResolveSilentHosts(t *testing.T) {
 	}
 }
 
+func TestEngine_ConsecutiveScansKeepConfirmedActiveFirewalledHosts(t *testing.T) {
+	db, err := oui.Load()
+	if err != nil {
+		t.Fatalf("failed to load embedded OUI database: %v", err)
+	}
+
+	iface := netinfo.Interface{
+		Name:   "wlan0",
+		Addr:   netip.MustParseAddr("192.168.1.50"),
+		Prefix: netip.MustParsePrefix("192.168.1.0/24"),
+	}
+
+	ipFirewalled := netip.MustParseAddr("192.168.1.25")
+	ipStaleGhost := netip.MustParseAddr("192.168.1.99")
+
+	// Before Scan #2, both ipFirewalled and ipStaleGhost are already in the ARP cache snapshot
+	snapTable := map[netip.Addr]TableEntry{
+		ipFirewalled: {
+			IP:      ipFirewalled,
+			MAC:     net.HardwareAddr{0x00, 0x50, 0x56, 0xC0, 0x00, 0x08},
+			IsValid: true,
+		},
+		ipStaleGhost: {
+			IP:      ipStaleGhost,
+			MAC:     net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+			IsValid: true,
+		},
+	}
+
+	// After Scan #2 ARP trigger, ipFirewalled is confirmed active (NUD_REACHABLE / SendARP),
+	// whereas ipStaleGhost remains an unconfirmed stale entry.
+	afterTable := map[netip.Addr]TableEntry{
+		ipFirewalled: {
+			IP:              ipFirewalled,
+			MAC:             net.HardwareAddr{0x00, 0x50, 0x56, 0xC0, 0x00, 0x08},
+			IsValid:         true,
+			ConfirmedActive: true,
+		},
+		ipStaleGhost: {
+			IP:              ipStaleGhost,
+			MAC:             net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55},
+			IsValid:         true,
+			ConfirmedActive: false,
+		},
+	}
+
+	mockReader := &mockTableReader{
+		tables: []map[netip.Addr]TableEntry{snapTable, afterTable},
+	}
+	engine := NewEngine(mockReader, &mockTrigger{}, db, iface,
+		WithTimeout(150*time.Millisecond),
+		WithPollInterval(20*time.Millisecond),
+	)
+
+	if err := engine.TakeSnapshot(); err != nil {
+		t.Fatalf("TakeSnapshot failed: %v", err)
+	}
+
+	results, err := engine.ResolveSilentHosts(context.Background(), []netip.Addr{ipFirewalled, ipStaleGhost})
+	if err != nil {
+		t.Fatalf("ResolveSilentHosts returned error: %v", err)
+	}
+
+	if len(results) != 1 {
+		t.Fatalf("expected 1 confirmed active firewalled host on 2nd scan, got %d: %+v", len(results), results)
+	}
+	if results[0].IP != ipFirewalled {
+		t.Errorf("expected %s to be discovered on 2nd scan, got %s", ipFirewalled, results[0].IP)
+	}
+}
+
 func TestEngine_SubnetFiltering(t *testing.T) {
 	iface := netinfo.Interface{
 		Name:   "wlan0",

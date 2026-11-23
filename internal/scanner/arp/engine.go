@@ -1,11 +1,13 @@
 package arp
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net/netip"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"netprobe-wifi/internal/netinfo"
@@ -56,6 +58,22 @@ func WithFilterSnapshot(filter bool) EngineOption {
 	}
 }
 
+// WithRateLimit sets the maximum trigger packets per second during ARP resolution.
+func WithRateLimit(pps int) EngineOption {
+	return func(e *Engine) {
+		if pps > 0 {
+			e.rateLimitPPS = pps
+		}
+	}
+}
+
+// WithOnProgress sets an optional callback invoked as silent targets are probed.
+func WithOnProgress(fn func(probed, total int)) EngineOption {
+	return func(e *Engine) {
+		e.onProgress = fn
+	}
+}
+
 // Engine coordinates kernel-provoked ARP discovery and IP-to-MAC resolution.
 type Engine struct {
 	reader           TableReader
@@ -65,8 +83,10 @@ type Engine struct {
 	timeout          time.Duration
 	pollInterval     time.Duration
 	concurrency      int
+	rateLimitPPS     int
 	filterSnapshot   bool
 	onHostDiscovered func(HostInfo)
+	onProgress       func(probed, total int)
 
 	mu       sync.Mutex
 	snapshot map[netip.Addr]TableEntry
@@ -89,6 +109,7 @@ func NewEngine(reader TableReader, trigger Trigger, db *oui.DB, iface netinfo.In
 		timeout:        DefaultARPTimeout,
 		pollInterval:   DefaultPollInterval,
 		concurrency:    50,
+		rateLimitPPS:   DefaultRateLimitPPS,
 		filterSnapshot: true,
 	}
 
@@ -97,6 +118,29 @@ func NewEngine(reader TableReader, trigger Trigger, db *oui.DB, iface netinfo.In
 	}
 
 	return e
+}
+
+// SetOnHostDiscovered configures the callback invoked immediately when a silent host is resolved.
+func (e *Engine) SetOnHostDiscovered(fn func(HostInfo)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.onHostDiscovered = fn
+}
+
+// SetOnProgress configures the callback invoked as silent hosts are probed.
+func (e *Engine) SetOnProgress(fn func(probed, total int)) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.onProgress = fn
+}
+
+// SetRateLimit configures the pacing rate for ARP triggers in packets per second.
+func (e *Engine) SetRateLimit(pps int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if pps > 0 {
+		e.rateLimitPPS = pps
+	}
 }
 
 // SetFilterSnapshot dynamically toggles snapshot filtering.
@@ -161,23 +205,60 @@ func (e *Engine) ResolveSilentHosts(ctx context.Context, silentIPs []netip.Addr)
 		e.mu.Unlock()
 	}
 
-	// 3. Provoke kernel ARP requests with bounded concurrency
+	// 3. Provoke kernel ARP requests with bounded concurrency and rate limiting
+	e.mu.Lock()
+	ratePPS := e.rateLimitPPS
+	onProg := e.onProgress
+	onDisc := e.onHostDiscovered
+	filterSnap := e.filterSnapshot
+	e.mu.Unlock()
+
+	if ratePPS <= 0 {
+		ratePPS = DefaultRateLimitPPS
+	}
+	// Scale rate limit for ARP triggers so a /24 completes smoothly within ~1.5s while preventing kernel queue drops
+	effectivePPS := ratePPS * 2
+	if effectivePPS < 100 {
+		effectivePPS = 100
+	}
+	if effectivePPS > 500 {
+		effectivePPS = 500
+	}
+	triggerInterval := time.Second / time.Duration(effectivePPS)
+	triggerTicker := time.NewTicker(triggerInterval)
+	defer triggerTicker.Stop()
+
 	sem := make(chan struct{}, e.concurrency)
 	var wg sync.WaitGroup
+	var probedCount int64
+	totalTargets := len(targets)
 
+provokeLoop:
 	for _, ip := range targets {
-		if ctx.Err() != nil {
-			break
+		select {
+		case <-ctx.Done():
+			break provokeLoop
+		case <-triggerTicker.C:
+		}
+
+		select {
+		case <-ctx.Done():
+			break provokeLoop
+		case sem <- struct{}{}:
 		}
 
 		wg.Add(1)
-		sem <- struct{}{}
 		go func(target netip.Addr) {
 			defer wg.Done()
 			defer func() { <-sem }()
 
 			// Provoke kernel resolution (e.g. UDP probe on Linux, SendARP on Windows)
 			_ = e.trigger.Provoke(ctx, target, e.iface)
+
+			probed := int(atomic.AddInt64(&probedCount, 1))
+			if onProg != nil && ctx.Err() == nil {
+				onProg(probed, totalTargets)
+			}
 		}(ip)
 	}
 
@@ -189,51 +270,76 @@ func (e *Engine) ResolveSilentHosts(ctx context.Context, silentIPs []netip.Addr)
 		unresolved[ip] = struct{}{}
 	}
 
+	directResolver, hasDirectResolver := e.trigger.(DirectResolver)
+
 	resolvedHosts := make(map[netip.Addr]HostInfo)
 	deadline := time.Now().Add(e.timeout)
 	ticker := time.NewTicker(e.pollInterval)
 	defer ticker.Stop()
+
+	checkTable := func() {
+		table, err := e.reader.ReadTable()
+		if err != nil && !hasDirectResolver {
+			return
+		}
+		if table == nil {
+			table = make(map[netip.Addr]TableEntry)
+		}
+
+		for ip := range unresolved {
+			entry, exists := table[ip]
+			if hasDirectResolver {
+				if directMAC, ok := directResolver.ResolvedMAC(ip); ok && len(directMAC) == 6 {
+					entry = TableEntry{
+						IP:              ip,
+						MAC:             directMAC,
+						IsValid:         true,
+						ConfirmedActive: true,
+					}
+					exists = true
+				}
+			}
+
+			if !exists || !entry.IsValid {
+				continue
+			}
+
+			// Check against pre-scan snapshot:
+			// Discard if it was already in the snapshot AND has not been actively confirmed reachable
+			// during the current scan (e.g., an old unconfirmed STALE cache entry).
+			// If the kernel or SendARP confirms the entry is actively reachable (ConfirmedActive == true)
+			// or its MAC changed, accept it so firewalled hosts never vanish on consecutive scans.
+			if filterSnap && snapshot != nil {
+				if oldEntry, wasInSnapshot := snapshot[ip]; wasInSnapshot && oldEntry.IsValid {
+					macChanged := len(oldEntry.MAC) > 0 && len(entry.MAC) > 0 && !bytes.Equal(oldEntry.MAC, entry.MAC)
+					if !entry.ConfirmedActive && !macChanged {
+						delete(unresolved, ip)
+						continue
+					}
+				}
+			}
+
+			// Resolved host in neighbor table (valid hardware address)
+			host := e.buildHostInfo(ip, entry, StatusDiscoveredARP, false)
+			resolvedHosts[ip] = host
+			delete(unresolved, ip)
+
+			if onDisc != nil {
+				onDisc(host)
+			}
+		}
+	}
+
+	// Immediate check after all triggers have been dispatched
+	checkTable()
 
 	for len(unresolved) > 0 {
 		select {
 		case <-ctx.Done():
 			return e.collectResults(resolvedHosts), ctx.Err()
 		case now := <-ticker.C:
-			table, err := e.reader.ReadTable()
-			if err != nil {
-				// Table read failure is transient or fatal; if deadline reached, stop
-				if now.After(deadline) {
-					return e.collectResults(resolvedHosts), nil
-				}
-				continue
-			}
-
-			for ip := range unresolved {
-				entry, exists := table[ip]
-				if !exists || !entry.IsValid {
-					continue
-				}
-
-				// Check against pre-scan snapshot:
-				// Discard if it was already completed before the scan
-				if e.filterSnapshot && snapshot != nil {
-					if oldEntry, wasInSnapshot := snapshot[ip]; wasInSnapshot && oldEntry.IsValid {
-						delete(unresolved, ip)
-						continue
-					}
-				}
-
-				// Resolved host in neighbor table (valid hardware address)
-				host := e.buildHostInfo(ip, entry, StatusDiscoveredARP, false)
-				resolvedHosts[ip] = host
-				delete(unresolved, ip)
-
-				if e.onHostDiscovered != nil {
-					e.onHostDiscovered(host)
-				}
-			}
-
-			if now.After(deadline) {
+			checkTable()
+			if len(unresolved) == 0 || now.After(deadline) {
 				return e.collectResults(resolvedHosts), nil
 			}
 		}
@@ -242,7 +348,8 @@ func (e *Engine) ResolveSilentHosts(ctx context.Context, silentIPs []netip.Addr)
 	return e.collectResults(resolvedHosts), nil
 }
 
-// EnrichHost looks up MAC and vendor information for any active host (e.g. from ICMP responses).
+// EnrichHost looks up MAC and vendor information for any active host (e.g. from ICMP responses)
+// by consulting the operating system neighbor table without emitting extra network packets.
 func (e *Engine) EnrichHost(ip netip.Addr) (HostInfo, bool, error) {
 	table, err := e.reader.ReadTable()
 	if err != nil {

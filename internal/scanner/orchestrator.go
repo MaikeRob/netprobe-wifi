@@ -212,31 +212,60 @@ func (o *Orchestrator) Run(ctx context.Context, cfg OrchestratorConfig, handlers
 	// 5. Stage 2: Kernel-Provoked ARP for Silent Hosts
 	var arpCount int64
 	if ctx.Err() == nil && len(silentIPs) > 0 && o.arpEngine != nil {
+		curICMP := int(atomic.LoadInt64(&icmpCount))
 		emitProgress(SweepProgressEvent{
 			Stage:          StageARP,
 			TotalHosts:     totalHosts,
 			ScannedHosts:   totalHosts,
-			ActiveHosts:    int(atomic.LoadInt64(&icmpCount)),
-			ICMPDiscovered: int(atomic.LoadInt64(&icmpCount)),
+			ActiveHosts:    curICMP,
+			ICMPDiscovered: curICMP,
 			Percent:        80.0,
 		})
 
-		resolvedHosts, err := o.arpEngine.ResolveSilentHosts(ctx, silentIPs)
-		if err == nil {
-			for _, h := range resolvedHosts {
-				atomic.AddInt64(&arpCount, 1)
-
-				aggregator.AddHost(DiscoveredHost{
-					IP:           h.IP.String(),
-					MAC:          h.MACString,
-					Vendor:       h.Vendor,
-					Kind:         h.Kind.String(),
-					RTT:          0,
-					DiscoveredBy: arp.StatusDiscoveredARP,
-					Responded:    false,
-				})
-			}
+		if cfg.RateLimit > 0 {
+			o.arpEngine.SetRateLimit(cfg.RateLimit)
 		}
+
+		o.arpEngine.SetOnHostDiscovered(func(h arp.HostInfo) {
+			newARP := int(atomic.AddInt64(&arpCount, 1))
+			aggregator.AddHost(DiscoveredHost{
+				IP:           h.IP.String(),
+				MAC:          h.MACString,
+				Vendor:       h.Vendor,
+				Kind:         h.Kind.String(),
+				RTT:          0,
+				DiscoveredBy: arp.StatusDiscoveredARP,
+				Responded:    false,
+			})
+			emitProgress(SweepProgressEvent{
+				Stage:          StageARP,
+				TotalHosts:     totalHosts,
+				ScannedHosts:   totalHosts,
+				ActiveHosts:    curICMP + newARP,
+				ICMPDiscovered: curICMP,
+				ARPDiscovered:  newARP,
+				Percent:        95.0,
+			})
+		})
+
+		o.arpEngine.SetOnProgress(func(probed, totalSilent int) {
+			pct := 80.0
+			if totalSilent > 0 {
+				pct = 80.0 + (float64(probed)/float64(totalSilent))*15.0
+			}
+			curARP := int(atomic.LoadInt64(&arpCount))
+			emitProgress(SweepProgressEvent{
+				Stage:          StageARP,
+				TotalHosts:     totalHosts,
+				ScannedHosts:   totalHosts,
+				ActiveHosts:    curICMP + curARP,
+				ICMPDiscovered: curICMP,
+				ARPDiscovered:  curARP,
+				Percent:        pct,
+			})
+		})
+
+		_, _ = o.arpEngine.ResolveSilentHosts(ctx, silentIPs)
 	}
 
 	// 6. Finalization and Flush
